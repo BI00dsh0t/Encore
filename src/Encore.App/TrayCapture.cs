@@ -3,7 +3,7 @@ using Encore.App.Overlay;
 
 namespace Encore.App;
 
-/// <summary>The tray's capture state and which icon shows it: the mark when idle, the app tile while capturing, a badge for errors.</summary>
+/// <summary>The tray's capture state, and the icon that shows it: the mark when idle, the tile while capturing.</summary>
 internal static class TrayCapture
 {
     /// <summary>The tooltip's state while the engine is in a crash loop.</summary>
