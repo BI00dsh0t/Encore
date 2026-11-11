@@ -284,6 +284,22 @@ public sealed class SettingsStoreTests : IDisposable
     }
 
     [Fact]
+    public void AHandEditedFileWithoutAProfilesOverridesOrTheGlobalMapOpensWithThemEmpty()
+    {
+        // A bug that bit: a profile with no overrides map crashed the engine at start.
+        File.WriteAllText(SettingsPath, """
+            {"schemaVersion":1,"revision":1,"profiles":{"c:\\games\\game.exe":{"name":"Game","ignored":false,"recordingsEnabled":false}}}
+            """);
+
+        var (store, code) = SettingsStore.Open(_folder);
+
+        Assert.Null(code);
+        Assert.Empty(store.Current.Global);
+        Assert.Empty(store.Current.Profiles[GameId].Overrides);
+        Assert.Equal("Game", store.Current.Profiles[GameId].Name);
+    }
+
+    [Fact]
     public void ReadDocumentReturnsTheCommittedDocumentAndTouchesNothing()
     {
         var store = Open();
