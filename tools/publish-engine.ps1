@@ -14,7 +14,10 @@
 [CmdletBinding()]
 param(
     # Where the published engine goes.
-    [string] $Output = (Join-Path $PSScriptRoot '..' 'publish' 'engine')
+    [string] $Output = (Join-Path $PSScriptRoot '..' 'publish' 'engine'),
+
+    # The version stamped on the engine; the release workflow passes the tag's.
+    [string] $Version = '0.0.0-dev'
 )
 
 $ErrorActionPreference = 'Stop'
@@ -36,7 +39,7 @@ if (-not (Get-Command vswhere.exe -ErrorAction SilentlyContinue)) {
     $env:PATH = "$env:PATH;$installer"
 }
 
-dotnet publish $Project -c Release -r win-x64 -o $Output
+dotnet publish $Project -c Release -r win-x64 -o $Output -p:Version=$Version
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet publish failed with exit code $LASTEXITCODE."
 }
