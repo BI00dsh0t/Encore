@@ -13,41 +13,10 @@ internal sealed partial class CaptureSession
 {
     public SessionOutcome End(string reason)
     {
-        bool anchored;
-        ICaptureSource? capture;
-        Timer? watch;
-
-        // A first frame still opening the encoders holds the gate; let it finish.
-        lock (_gate)
-        {
-            RequestStop(reason);
-            anchored = _anchored;
-            capture = _capture;
-            _capture = null;
-            watch = _deviceWatch;
-            _deviceWatch = null;
-        }
-
+        var (anchored, capture, watch) = StopAndTakeCapture(reason);
         _firstFrameTimer.Dispose();
         watch?.Dispose();
-
-        // A forced restart or recovery that is running finishes first; a recovery sees the stop and installs nothing.
-        Thread? restart;
-        Thread? recovery;
-        lock (_chainLock)
-        {
-            restart = _restartThread;
-            recovery = _recoveryThread;
-        }
-
-        restart?.Join();
-
-        // Bounded: an attempt hung on the driver must not freeze the orchestrator.
-        if (recovery is not null && !recovery.Join(RecoveryJoinWait))
-        {
-            _log.LogWarning("The GPU device recovery hadn't finished within {Seconds:0} s of the stop; the session ends without it", RecoveryJoinWait.TotalSeconds);
-        }
-
+        WaitForRestartAndRecovery();
         EncoderChain? chain;
         bool lost;
         lock (_chainLock)
@@ -67,65 +36,129 @@ internal sealed partial class CaptureSession
             capture?.Dispose();
             if (!anchored)
             {
-                var message = _failure?.Message ?? $"Capture stopped ({_stopReason}) before the first frame.";
-                return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : EngineFailure.CodeOf(_failure), message));
+                return NeverAnchored();
             }
 
             // A failed restart left nothing to flush, and a lost device's chain can't be flushed.
             if (!chain!.IsDisposed && !lost)
             {
-                // No frame can arrive now; let the encoder thread offer what is queued before the flush.
-                chain.CompleteVideo();
-
-                // Capture is stopped and no frame is in flight; stop audio, then drain everything.
-                chain.StopTaps();
-
-                // Silent Tracks stop with the device taps, not after the teardown below.
-                chain.StopSilenceClock();
-                chain.ReportAudioFaults();
-                chain.Finish(_lastFrameQpc);
-                WriteStats(chain);
+                Flush(chain);
             }
         }
         finally
         {
-            // A save still waiting has every packet it will get, and so has a Recording.
-            _outputFinished = true;
-            chain?.Tap?.Close();
-            CloseChains();
-            DisposeAll();
-            RecordingTap? lostTap;
-            lock (_chainLock)
-            {
-                lostTap = _lostTap;
-                _lostTap = null;
-            }
-
-            lostTap?.Dispose();
+            CloseOutput(chain);
         }
 
         if (_failure is null)
         {
-            var seconds = (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency;
-            if (IsMonitor)
-            {
-                _log.LogInformation("Monitor capture of {Seconds:0.0} s ended", seconds);
-            }
-            else if (_path is null && _keepRing)
-            {
-                _log.LogInformation("Draining: buffered {Seconds:0.0} s; Rewind is kept for saves until the drain is released", seconds);
-            }
-            else if (_path is null)
-            {
-                _log.LogInformation("Buffered {Seconds:0.0} s; Rewind is released once no save holds it", seconds);
-            }
-            else
-            {
-                _log.LogInformation("Wrote {Seconds:0.0} s to {Path}", seconds, _path);
-            }
+            LogEnd();
         }
 
         return new SessionOutcome(_path, _stopReason, _failure);
+    }
+
+    /// <summary>Stops the session and takes its capture and device watch out, under the gate.</summary>
+    private (bool Anchored, ICaptureSource? Capture, Timer? Watch) StopAndTakeCapture(string reason)
+    {
+        // A first frame still opening the encoders holds the gate; let it finish.
+        lock (_gate)
+        {
+            RequestStop(reason);
+            var anchored = _anchored;
+            var capture = _capture;
+            _capture = null;
+            var watch = _deviceWatch;
+            _deviceWatch = null;
+            return (anchored, capture, watch);
+        }
+    }
+
+    /// <summary>A forced restart or recovery that is running finishes first; a recovery sees the stop and installs nothing.</summary>
+    private void WaitForRestartAndRecovery()
+    {
+        Thread? restart;
+        Thread? recovery;
+        lock (_chainLock)
+        {
+            restart = _restartThread;
+            recovery = _recoveryThread;
+        }
+
+        restart?.Join();
+
+        // Bounded: an attempt hung on the driver must not freeze the orchestrator.
+        if (recovery is not null && !recovery.Join(RecoveryJoinWait))
+        {
+            _log.LogWarning("The GPU device recovery hadn't finished within {Seconds:0} s of the stop; the session ends without it", RecoveryJoinWait.TotalSeconds);
+        }
+    }
+
+    /// <summary>The outcome of a session that stopped before its first frame: a failure, with no file.</summary>
+    private SessionOutcome NeverAnchored()
+    {
+        var message = _failure?.Message ?? $"Capture stopped ({_stopReason}) before the first frame.";
+        return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : EngineFailure.CodeOf(_failure), message));
+    }
+
+    /// <summary>Flushes a live chain once capture has stopped, then writes the stats file.</summary>
+    private void Flush(EncoderChain chain)
+    {
+        // No frame can arrive now; let the encoder thread offer what is queued before the flush.
+        chain.CompleteVideo();
+
+        // Capture is stopped and no frame is in flight; stop audio, then drain everything.
+        chain.StopTaps();
+
+        // Silent Tracks stop with the device taps, not after the teardown below.
+        chain.StopSilenceClock();
+        chain.ReportAudioFaults();
+        chain.Finish(_lastFrameQpc);
+        WriteStats(chain);
+    }
+
+    /// <summary>Closes the Recording tap, the chains and the device.</summary>
+    private void CloseOutput(EncoderChain? chain)
+    {
+        // A save still waiting has every packet it will get, and so has a Recording.
+        _outputFinished = true;
+        chain?.Tap?.Close();
+        CloseChains();
+        DisposeAll();
+        TakeLostTap()?.Dispose();
+    }
+
+    /// <summary>Logs how a session that didn't fail ended: what it wrote or buffered.</summary>
+    private void LogEnd()
+    {
+        var seconds = (double)(_lastFrameQpc - _anchorQpc) / _qpcFrequency;
+        if (IsMonitor)
+        {
+            _log.LogInformation("Monitor capture of {Seconds:0.0} s ended", seconds);
+        }
+        else if (_path is null && _keepRing)
+        {
+            _log.LogInformation("Draining: buffered {Seconds:0.0} s; Rewind is kept for saves until the drain is released", seconds);
+        }
+        else if (_path is null)
+        {
+            _log.LogInformation("Buffered {Seconds:0.0} s; Rewind is released once no save holds it", seconds);
+        }
+        else
+        {
+            _log.LogInformation("Wrote {Seconds:0.0} s to {Path}", seconds, _path);
+        }
+    }
+
+    /// <summary>Takes the lost chain's Recording tap out, for the caller to close; null when there is none.</summary>
+    private RecordingTap? TakeLostTap()
+    {
+        lock (_chainLock)
+        {
+            var tap = _lostTap;
+            _lostTap = null;
+            return tap;
+        }
     }
 
     /// <summary>Like <see cref="End"/>, but in Replay mode the ring is kept, so a save still cuts from it until Release.</summary>
