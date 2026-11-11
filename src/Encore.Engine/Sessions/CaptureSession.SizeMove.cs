@@ -41,8 +41,8 @@ internal sealed partial class CaptureSession
     {
         lock (_chainLock)
         {
-            if (_chainsClosed || _keepRing || _outputFinished || _stopped || _deviceLost || _restarting || _building || _tearingDown > 0
-                || _armed is not null || _retiring is not null || _prepared is not null || RecordReservedLocked()
+            if (IsEndingLocked || _deviceLost || _restarting || _building || _tearingDown > 0
+                || IsSwitchingLocked || _prepared is not null || RecordReservedLocked()
                 || _current is not { IsBuilt: true, IsDisposed: false, Tap.HasWriter: false } old)
             {
                 _log.LogInformation("The game's size changed to {Size} and held; the move waits, since another chain change or a Recording is running", target);
@@ -71,7 +71,7 @@ internal sealed partial class CaptureSession
     /// <summary>Queues <see cref="ArmMove"/> when a move's chain is prepared and nothing blocks it. Under the chain lock.</summary>
     private void TryStartArmLocked()
     {
-        if (!_armMove || _armPending || _prepared is null || _armed is not null || _retiring is not null || _restarting || _deviceLost
+        if (!_armMove || _armPending || _prepared is null || IsSwitchingLocked || _restarting || _deviceLost
             || _current is not { Tap.HasWriter: false } || _chainsClosed || RecordReservedLocked())
         {
             return;
@@ -97,8 +97,8 @@ internal sealed partial class CaptureSession
             lock (_chainLock)
             {
                 _armPending = false;
-                if (!_stopped && _armMove && _prepared is { } prepared && _armed is null && _retiring is null && !_restarting && !_deviceLost
-                    && _current is { Tap.HasWriter: false } current && !_outputFinished && !_keepRing && !_chainsClosed && !RecordReservedLocked())
+                if (!IsEndingLocked && _armMove && _prepared is { } prepared && !IsSwitchingLocked && !_restarting && !_deviceLost
+                    && _current is { Tap.HasWriter: false } current && !RecordReservedLocked())
                 {
                     _prepared = null;
                     _wanted = null;
