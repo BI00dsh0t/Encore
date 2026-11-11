@@ -67,7 +67,7 @@ public sealed partial class CompositeCapture
                 }
                 finally
                 {
-                    D3D11Device.ReleaseTexture(black);
+                    Textures.Release(black);
                 }
             }
         }
@@ -79,13 +79,13 @@ public sealed partial class CompositeCapture
             foreach (var (scaler, staging) in _scaled.Values)
             {
                 scaler.Dispose();
-                D3D11Device.ReleaseTexture(staging);
+                Textures.Release(staging);
             }
 
             _scaled.Clear();
             lock (_clearing)
             {
-                D3D11Device.ReleaseTexture(_canvas);
+                Textures.Release(_canvas);
                 _canvas = 0;
             }
         }

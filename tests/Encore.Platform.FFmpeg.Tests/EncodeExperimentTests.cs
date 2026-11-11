@@ -64,7 +64,7 @@ public sealed class EncodeExperimentTests : IDisposable
             }
             finally
             {
-                D3D11Device.ReleaseTexture(source);
+                Textures.Release(source);
             }
 
             output.WriteSilence(2 * AudioTimeline.SampleRate);

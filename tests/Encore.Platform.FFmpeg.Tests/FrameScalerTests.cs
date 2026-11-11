@@ -118,8 +118,8 @@ public sealed class FrameScalerTests : IDisposable
             }
             finally
             {
-                D3D11Device.ReleaseTexture(white);
-                D3D11Device.ReleaseTexture(source);
+                Textures.Release(white);
+                Textures.Release(source);
             }
 
             video.Flush();

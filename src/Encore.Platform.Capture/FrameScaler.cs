@@ -75,7 +75,7 @@ public sealed unsafe partial class FrameScaler : IDisposable
 
         if (!IsNv12 && content == Output)
         {
-            var box = D3D11Device.BoxOf(content);
+            var box = FrameCopies.BoxOf(content);
             _device.Context->CopySubresourceRegion((ID3D11Resource*)target, slice, 0, 0, 0, (ID3D11Resource*)source, 0, &box);
             return;
         }
@@ -101,7 +101,7 @@ public sealed unsafe partial class FrameScaler : IDisposable
         Release(ref _videoDevice);
         if (_copyIn != 0)
         {
-            D3D11Device.ReleaseTexture(_copyIn);
+            Textures.Release(_copyIn);
             _copyIn = 0;
         }
     }
@@ -224,7 +224,7 @@ public sealed unsafe partial class FrameScaler : IDisposable
         if (_copyIn != 0)
         {
             _inputs.Remove(_copyIn);
-            D3D11Device.ReleaseTexture(_copyIn);
+            Textures.Release(_copyIn);
         }
 
         _copyIn = _device.CreateTexture(size);
