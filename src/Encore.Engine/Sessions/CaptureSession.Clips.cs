@@ -89,7 +89,7 @@ internal sealed partial class CaptureSession
 
         _log.LogInformation(
             "Buffer Window {Old} s -> {New} s at the Reset {Reset:0.000} s after the anchor: ring generation {Generation} {Storage}, {Capacity} packets preallocated",
-            chain.WindowSeconds, pending, us / 1e6, generation, EncoderChain.StorageOf(next), chain.RingCapacity(pending));
+            chain.WindowSeconds, pending, us / 1e6, generation, ReplayRings.StorageOf(next), chain.RingCapacity(pending));
         chain.WindowSeconds = pending;
     }
 
