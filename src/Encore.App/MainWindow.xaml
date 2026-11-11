@@ -80,7 +80,7 @@
                 <ContentControl x:Name="BrandName"
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center"
-                                Content="{Binding Title, ElementName=Shell}"
+                                Content="Encore"
                                 Style="{DynamicResource EncoreBrandStyle}"
                                 Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
             </StackPanel>
