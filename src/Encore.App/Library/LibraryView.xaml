@@ -386,11 +386,11 @@
                         </ContextMenu>
                     </ListBox.ContextMenu>
                 </ListBox>
-                <!-- A search that matches nothing says so; a filter that matches nothing shows an empty list. -->
+                <!-- A search or a filter that matches nothing says so. -->
                 <TextBlock x:Name="NoResultsMessage"
                            HorizontalAlignment="Center"
                            VerticalAlignment="Center"
-                           FontSize="14"
+                           FontSize="{DynamicResource BodyTextBlockFontSize}"
                            Foreground="{DynamicResource TextFillColorSecondaryBrush}"
                            Text="{Binding List.NoResultsText}"
                            TextAlignment="Center"

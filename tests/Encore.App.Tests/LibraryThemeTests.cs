@@ -217,6 +217,13 @@ public sealed class LibraryThemeTests
                 Assert.Equal("· Alt+F10 saves the last 30 s", model.StatusLine.Hint);
                 Assert.Contains(Descendants<TextBlock>(view), t => t.Text == "Recording" && t.IsVisible);
                 Save(window, $"library-badge-hint-{name}.png");
+
+                // A filter that matches nothing says so, in place of the list.
+                model.Library.List.FavouritesOnly = true;
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.True(((FrameworkElement)view.FindName("NoResultsMessage")).IsVisible);
+                Save(window, $"library-no-match-{name}.png");
+                model.Library.List.FavouritesOnly = false;
             }
         }
         finally

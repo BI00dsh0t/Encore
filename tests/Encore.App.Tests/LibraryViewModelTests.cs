@@ -355,6 +355,10 @@ public sealed class LibraryViewModelTests
             _engine.State = _engine.State with { Seq = 3, Library = [match, clip] };
             _engine.RaiseChanged();
             Assert.False(viewModel.ShowsEmptyMessage);
+            Assert.Null(viewModel.List.NoResultsText);
+            viewModel.List.FavouritesOnly = true;
+            Assert.Equal("Nothing matches these filters.", viewModel.List.NoResultsText);
+            viewModel.List.FavouritesOnly = false;
 
             // The kind badge: a Recording's only.
             var rows = viewModel.List.Entries.OfType<LibraryRow>().ToDictionary(r => r.Name, r => r.Badge);
