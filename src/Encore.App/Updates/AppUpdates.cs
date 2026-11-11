@@ -122,7 +122,7 @@ internal sealed class AppUpdates : Observable
         }
         catch (Exception e) when (e is InvalidDataException or Velopack.Exceptions.ChecksumFailedException)
         {
-            Status = "An update didn't match its checksum, so it was deleted unused. Encore tries again tomorrow.";
+            Status = "An update failed its integrity check, so it wasn't installed. Encore tries again tomorrow.";
             _log($"Update rejected: {e.Message}");
         }
         catch (Exception e)

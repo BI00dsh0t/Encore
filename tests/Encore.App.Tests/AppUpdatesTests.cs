@@ -76,6 +76,30 @@ public sealed class AppUpdatesTests : IDisposable
         Assert.False(File.Exists(package));
     }
 
+    [Fact]
+    public void OnlyAFeedSignedByTheReleaseKeyIsTrusted()
+    {
+        using var releaseKey = System.Security.Cryptography.ECDsa.Create(System.Security.Cryptography.ECCurve.NamedCurves.nistP256);
+        var publicKey = releaseKey.ExportSubjectPublicKeyInfoPem();
+        var feed = "{\"Assets\":[]}"u8.ToArray();
+        var signature = FeedSignature.Sign(feed, releaseKey.ExportPkcs8PrivateKeyPem());
+
+        Assert.True(FeedSignature.IsValid(feed, signature, publicKey));
+        Assert.False(FeedSignature.IsValid("{\"Assets\":[{}]}"u8.ToArray(), signature, publicKey));
+        Assert.False(FeedSignature.IsValid(feed, signature));
+    }
+
+    [Fact]
+    public void AnOldInstallHoldingTheUsersFilesIsLeftAlone()
+    {
+        File.WriteAllText(Path.Combine(_folder, "Encore.App.exe"), "");
+        File.WriteAllText(Path.Combine(_folder, "LICENSE"), "");
+        Assert.False(OldInstall.HasOtherFiles(_folder));
+
+        File.WriteAllText(Path.Combine(_folder, "my clip.mp4"), "");
+        Assert.True(OldInstall.HasOtherFiles(_folder));
+    }
+
     private sealed class FakeUpdater : IUpdater
     {
         public string? Newer { get; init; }
