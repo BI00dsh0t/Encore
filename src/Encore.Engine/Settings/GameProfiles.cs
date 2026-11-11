@@ -73,6 +73,10 @@ internal static class GameProfiles
     {
         var global = SettingsResolver.Resolve(document, null);
         return global.CaptureNewGames
-            || global.ManualGames.Any(path => string.Equals(GamePaths.CanonicalOrLowercase(path), profileId, StringComparison.Ordinal));
+            || global.ManualGames.Select(GamePaths.CanonicalOrLowercase).Any(path => IsProgram(path, profileId));
     }
+
+    // The same program: the same path, or another version of the same Store app.
+    private static bool IsProgram(string path, string profileId) =>
+        string.Equals(path, profileId, StringComparison.Ordinal) || StorePackages.SameProgram(path, profileId);
 }

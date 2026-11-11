@@ -34,7 +34,8 @@ internal static class GameDetectionSetup
             game => hub.Publish(GameMessages.Exited, game),
             () => hub.State.TargetGame?.ProcessId,
             options.Time,
-            id => store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored);
+            id => store.Current.Profiles.TryGetValue(id, out var profile) && profile.Ignored,
+            path => ProfileMatch.Resolve(store.Current, path));
     }
 
     private static void Detected(DetectedGame game, SettingsStore store, EventHub hub, Warnings warnings, ILogger log)

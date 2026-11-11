@@ -59,8 +59,13 @@ public sealed partial class GameMonitor
         && IsListed(current)
         && !(_seen.TryGetValue(focused, out var other) && IsListed(other));
 
-    private bool IsListed(SeenProcess game) =>
-        (game.ProfileId is { } id && _listedNow.Contains(id)) || _listedNow.Contains(game.RawPath);
+    private bool IsListed(SeenProcess game) => IsListed(game, _listedNow);
+
+    // A listed path is the program's own path, its Game Profile's (a Store app's older version), or the raw one.
+    private static bool IsListed(SeenProcess game, IReadOnlySet<string> listed) =>
+        (game.Path is { } path && listed.Contains(path))
+        || (game.ProfileId is { } id && listed.Contains(id))
+        || listed.Contains(game.RawPath);
 
     private TargetCandidate? Detected(int? processId) =>
         processId is { } detected && _seen.TryGetValue(detected, out var seen) ? seen.Candidate : null;

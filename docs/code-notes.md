@@ -50,8 +50,10 @@ How a game is detected:
 - A detected game stays known, with its limited handle held, until its process exits. Minimizing it or closing its window
   does not end it.
 - Excluded processes (the engine's and the attached App's) and anything under the install folder are never detected.
-- The fullscreen rule alone is weak evidence: a browser or media player showing a video passes it. So the apps in
-  `KnownNonGames` are only ever detected by a listing.
+- The fullscreen rule alone is weak evidence: a browser or media player showing a video passes it. So the programs in
+  `NeverGames` (anything under the Windows folder, and a list of apps by file name) are only ever detected by a listing.
+- A Store app's folder names its version. `profileOf` maps a new version to the Game Profile of an older one
+  (`StorePackages.Key`), so a choice and a game's settings survive an update.
 - A game whose Game Profile is Ignored is never detected. One that becomes Ignored while detected is forgotten as if it
   had exited, and clearing the flag lets it be detected again.
 

@@ -187,6 +187,19 @@ public sealed class GameMonitorTests : IDisposable
     }
 
     [Fact]
+    public void AFullscreenProgramUnderTheWindowsFolderIsNotDetected()
+    {
+        _probe.Add(GamePid, Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.System), "cmd.exe"));
+        _probe.Foreground = new GameWindow(1, GamePid);
+
+        _monitor.Poll();
+        PollAfter(_monitor, 1);
+
+        Assert.Empty(_detected);
+        Assert.Empty(_proposals);
+    }
+
+    [Fact]
     public void ABorderlessUnknownAppFocusedWhileAListedGameRunsDoesNotStealTheTargetButAListedOneDoes()
     {
         var other = Path.Combine(_folder, "Other.exe");

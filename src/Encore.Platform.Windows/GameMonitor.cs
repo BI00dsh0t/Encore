@@ -24,6 +24,7 @@ public sealed partial class GameMonitor : IDisposable
     private readonly Func<int?>? _target;
     private readonly TimeProvider _time;
     private readonly Func<string, bool>? _isIgnored;
+    private readonly Func<string, string>? _profileOf;
     private readonly ManualResetEventSlim _stop = new();
 
     // Poll's thread only: every process classified, until it exits; the detected ones have a Candidate.
@@ -43,6 +44,7 @@ public sealed partial class GameMonitor : IDisposable
     private int _disposed;
 
     /// <summary>Every callback runs on the monitor's thread; listed, target and isIgnored are read on each poll.</summary>
+    /// <param name="profileOf">Maps a program's canonical path to the Game Profile id it belongs to; null keeps the path.</param>
     public GameMonitor(
         IGameWindowProbe probe,
         Func<int, bool> isExcluded,
@@ -55,7 +57,8 @@ public sealed partial class GameMonitor : IDisposable
         Action<DetectedGame>? exited = null,
         Func<int?>? target = null,
         TimeProvider? time = null,
-        Func<string, bool>? isIgnored = null)
+        Func<string, bool>? isIgnored = null,
+        Func<string, string>? profileOf = null)
     {
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(isExcluded);
@@ -75,6 +78,7 @@ public sealed partial class GameMonitor : IDisposable
         _target = target;
         _time = time ?? TimeProvider.System;
         _isIgnored = isIgnored;
+        _profileOf = profileOf;
     }
 
     /// <summary>Starts polling on a background thread, the first poll at once.</summary>
@@ -163,7 +167,7 @@ public sealed partial class GameMonitor : IDisposable
             // A process's first window here is the foreground one when it is the process's, else its first in Z order.
             if (game.Candidate is null)
             {
-                if ((listed.Contains(game.ProfileId!) || listed.Contains(game.RawPath)) && !Ignored(game))
+                if (IsListed(game, listed) && !Ignored(game))
                 {
                     Detect(game, window.Handle);
                 }
@@ -210,13 +214,16 @@ public sealed partial class GameMonitor : IDisposable
             return null;
         }
 
-        var profileId = ProfileIdOf(process, processId);
-        var underInstall = profileId is not null
+        var path = CanonicalPathOf(process, processId);
+        var underInstall = path is not null
             && _installFolder is not null
-            && profileId.StartsWith(_installFolder, StringComparison.Ordinal);
-        seen = new SeenProcess(processId, process, profileId, process.ImagePath.ToLowerInvariant(), profileId is not null && !underInstall)
+            && path.StartsWith(_installFolder, StringComparison.Ordinal);
+        var rawPath = process.ImagePath.ToLowerInvariant();
+        var profileId = path is null ? null : _profileOf?.Invoke(path) ?? path;
+        seen = new SeenProcess(processId, process, profileId, rawPath, path is not null && !underInstall)
         {
-            NonGame = KnownNonGames.Contains(Path.GetFileName(process.ImagePath)),
+            Path = path,
+            NonGame = NeverGames.Contains(path ?? rawPath),
         };
         _seen.Add(processId, seen);
         return seen;
@@ -242,7 +249,7 @@ public sealed partial class GameMonitor : IDisposable
     }
 
     // The canonical executable path; null, and never detected, when it can't be made canonical.
-    private string? ProfileIdOf(IGameProcess process, int processId)
+    private string? CanonicalPathOf(IGameProcess process, int processId)
     {
         try
         {
