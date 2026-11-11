@@ -151,7 +151,7 @@ jobs:
           dotnet tool install --global vpk --version 1.2.161
           $channel = if ($env:PRERELEASE -eq 'true') { 'beta' } else { 'win' }
           vpk pack --packId EncoreApp --packVersion $env:VERSION --packDir publish/Encore `
-            --mainExe Encore.App.exe --packTitle Encore --packAuthors BI00dsh0t `
+            --mainExe Encore.App.exe --packTitle Encore --packAuthors BI00dsh0t --icon src/Encore.App/Icons/encore.ico `
             --channel $channel --outputDir releases
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
