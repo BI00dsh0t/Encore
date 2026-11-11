@@ -31,3 +31,9 @@ skills-lock.json
 CLAUDE.md
 scratch_build.log
 scratch-build.txt
+
+# The brand kit: only the vector masters, the generator and its README are source.
+# Its PNG and ICO exports and the preview are regenerated, and exploration/ holds rejected concepts.
+branding/*.png
+branding/*.ico
+branding/exploration/
