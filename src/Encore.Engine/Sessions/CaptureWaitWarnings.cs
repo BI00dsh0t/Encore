@@ -24,7 +24,7 @@ internal sealed class CaptureWaitWarnings(Warnings warnings, ILogger log)
             : CaptureWindow.None(why ?? "no window of the process can be captured"),
         Waiting,
         Ended,
-        e => CaptureSession.CodeOf(e) == ErrorCodes.CaptureFailed);
+        e => EngineFailure.CodeOf(e) == ErrorCodes.CaptureFailed);
 
     private void Waiting(TargetCandidate target, string why)
     {

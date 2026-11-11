@@ -88,7 +88,7 @@ public sealed class TracerCapture(DebugCaptureCommand command, Instance instance
         var outcome = Wait(orchestrator, session, anchored, stats, cancellation);
         if (outcome.Failure is { } failure)
         {
-            throw failure as EngineFailure ?? new EngineFailure(CaptureSession.CodeOf(failure), failure.Message);
+            throw failure as EngineFailure ?? new EngineFailure(EngineFailure.CodeOf(failure), failure.Message);
         }
 
         return outcome.Path!;

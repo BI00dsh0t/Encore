@@ -4,7 +4,6 @@ using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 using Encore.Contracts.Messages;
 using Encore.Core.Audio;
-using Encore.Core.Monitors;
 using Encore.Core.Output;
 using Encore.Core.Sessions;
 using Encore.Media;
@@ -109,7 +108,8 @@ internal sealed class CaptureSession : ICaptureSession
     // Checks the device from the anchor on; under the gate.
     private Timer? _deviceWatch;
 
-    private readonly IVideoEncoderCatalog _encoders;
+    private readonly EncoderResolver _encoderResolver;
+    private readonly CaptureSources _sources;
     private long _anchorQpc;
     private long _lastFrameQpc;
     private bool _anchored;
@@ -123,9 +123,10 @@ internal sealed class CaptureSession : ICaptureSession
         _audio = audio;
         _events = events;
         _options = options;
-        _encoders = encoders;
         _loggers = loggers;
         _log = loggers.CreateLogger<CaptureSession>();
+        _encoderResolver = new EncoderResolver(options.Encoder, encoders, _log);
+        _sources = new CaptureSources(options, loggers, _log, OnFrame, OnClosed, Fail);
         _stats = options.Stats;
         _micMute = new MicMuteSchedule(spec.MicMuted);
         _firstFrameTimer = new Timer(_ => OnFirstFrameTimeout(), null, Timeout.InfiniteTimeSpan, Timeout.InfiniteTimeSpan);
@@ -153,14 +154,14 @@ internal sealed class CaptureSession : ICaptureSession
                     var placements = MonitorCanvas.Place([one]);
                     if (placements.Count == 1)
                     {
-                        (_spec, _) = PlanCanvas(_spec, [one], placements, CanEncode, _options.Warn, _log);
+                        (_spec, _) = CanvasPlanner.Plan(_spec, [one], placements, _encoderResolver.CanEncode, _options.Warn, _log);
                     }
                 }
             }
         }
 
         // Before anything is opened: the first codec use may run the probe.
-        var (encoder, codec) = ResolveEncoder(_spec);
+        var (encoder, codec) = _encoderResolver.Resolve(_spec);
         var target = _spec.Target;
         if (_composite is not null)
         {
@@ -221,11 +222,13 @@ internal sealed class CaptureSession : ICaptureSession
         {
             // Started as it is chosen: a WGC item that fails to start falls back to Desktop Duplication.
             _firstFrameTimer.Change(_options.FirstFrameTimeout, Timeout.InfiniteTimeSpan);
-            StartMonitorCapture(_device, first.Fps, StartInstalled);
+            _sources.StartForMonitor(_composite, _monitor, _device, first.Fps, StartInstalled);
             return;
         }
 
-        ICaptureSource capture = _composite is not null ? NewComposite(_device, first.Fps) : NewCapture(target.Window, _device, first.Fps);
+        ICaptureSource capture = _composite is not null
+            ? _sources.Composite(_composite, _device, first.Fps)
+            : _sources.ForWindow(target.Window, _device, first.Fps);
         lock (_gate)
         {
             _capture = capture;
@@ -236,7 +239,7 @@ internal sealed class CaptureSession : ICaptureSession
     }
 
     /// <summary>For tests: which API the session captures through, <c>wgc</c> or <c>desktop-duplication</c>.</summary>
-    internal string CaptureApi { get; private set; } = "wgc";
+    internal string CaptureApi => _sources.Api;
 
     /// <summary>For tests: the Desktop Duplication capture's next acquire behaves as <c>DXGI_ERROR_ACCESS_LOST</c>.</summary>
     internal void SimulateCaptureAccessLost()
@@ -255,79 +258,11 @@ internal sealed class CaptureSession : ICaptureSession
         duplication.SimulateAccessLost();
     }
 
-    /// <summary>Plans the canvas of the screens; its codec and size replace the snapshot's video. Rules: docs/code-notes.md.</summary>
+    /// <summary>Plans the canvas of the screens; its codec and size replace the snapshot's video.</summary>
     private void PlanCanvas(IReadOnlyList<DisplayMonitor> screens)
     {
-        (_spec, _composite) = PlanCanvas(_spec, screens, MonitorCanvas.Place(screens), CanEncode, _options.Warn, _log);
-    }
-
-    /// <summary>The same plan on screens already placed: the spec to encode with, and the placements (null for one screen).</summary>
-    internal static (SessionSpec Spec, IReadOnlyList<MonitorPlacement>? Composite) PlanCanvas(
-        SessionSpec spec,
-        IReadOnlyList<DisplayMonitor> screens,
-        IReadOnlyList<MonitorPlacement> placements,
-        Func<VideoCodec, bool> canEncode,
-        Action<string, string>? warn,
-        ILogger log)
-    {
-        if (placements.Count == 0)
-        {
-            throw new EngineFailure(ErrorCodes.MonitorRecordingNoScreens, "None of the screens chosen to record is connected.");
-        }
-
-        if (placements.Count == 1)
-        {
-            var only = screens.First(s => string.Equals(s.DeviceName, placements[0].Monitor.DeviceName, StringComparison.OrdinalIgnoreCase));
-            if (!spec.Snapshot.Video.MatchSource)
-            {
-                return (spec with { Screens = [only] }, null);
-            }
-
-            // One screen matching its source records at its physical size, with HEVC or AV1 when over H.264's 4096 px.
-            var single = MonitorCanvasRule.Plan(
-                [new DisplayMonitor(only.DeviceName, only.DeviceName, placements[0].Width, placements[0].Height, only.Primary, null, placements[0].X, placements[0].Y, placements[0].RefreshHz)],
-                spec.Snapshot.Video.Codec,
-                canEncode);
-            log.LogInformation("One screen at source size: {Native}x{NativeHeight} encoded {Codec} {Width}x{Height}",
-                single.NativeWidth, single.NativeHeight, single.Codec, single.Width, single.Height);
-            if (single.Codec == VideoCodec.H264 && single.Scaled)
-            {
-                warn?.Invoke(
-                    ErrorCodes.MonitorRecordingScaled,
-                    $"No HEVC or AV1 encoder works on this PC, so the {single.NativeWidth} × {single.NativeHeight} Monitor Recording is scaled down to {single.Width} × {single.Height} for H.264.");
-            }
-
-            var oneVideo = spec.Snapshot.Video;
-            return (spec with { Screens = [only], Snapshot = spec.Snapshot with { Video = oneVideo with { Codec = single.Codec, Width = single.Width, Height = single.Height } } }, null);
-        }
-
-        var placed = placements.Select(p => new DisplayMonitor(p.Monitor.DeviceName, p.Monitor.DeviceName, p.Width, p.Height, p.Monitor.IsPrimary, null, p.X, p.Y, p.RefreshHz)).ToList();
-        var video = spec.Snapshot.Video;
-        var plan = MonitorCanvasRule.Plan(placed, video.Codec, canEncode);
-        log.LogInformation("Canvas {Native}x{NativeHeight} encoded {Codec} {Width}x{Height} (Output codec {Output})",
-            plan.NativeWidth, plan.NativeHeight, plan.Codec, plan.Width, plan.Height, video.Codec);
-        if (plan.Codec == VideoCodec.H264 && plan.Scaled)
-        {
-            warn?.Invoke(
-                ErrorCodes.MonitorRecordingScaled,
-                $"No HEVC or AV1 encoder works on this PC, so the {plan.NativeWidth} × {plan.NativeHeight} Monitor Recording is scaled down to {plan.Width} × {plan.Height} for H.264.");
-        }
-
-        return (spec with { Snapshot = spec.Snapshot with { Video = video with { Codec = plan.Codec, Width = plan.Width, Height = plan.Height } } }, placements);
-    }
-
-    /// <summary>Whether this PC has a working encoder for the codec, by the probe; false when the probe fails.</summary>
-    private bool CanEncode(VideoCodec codec)
-    {
-        try
-        {
-            return _encoders.EncoderFor(codec) is not null;
-        }
-        catch (Exception e)
-        {
-            _log.LogWarning("The {Codec} encoder probe failed: {Message}", codec, e.Message);
-            return false;
-        }
+        (_spec, _composite) = CanvasPlanner.Plan(
+            _spec, screens, MonitorCanvas.Place(screens), _encoderResolver.CanEncode, _options.Warn, _log);
     }
 
     /// <summary>Makes every chain of the session, at the snapshot's size or, when matching the source, the source's size.</summary>
@@ -335,19 +270,7 @@ internal sealed class CaptureSession : ICaptureSession
         SizedToSource(new EncoderChain(spec, encoder, codec, path, _options, device, _audio, _micMute, _loggers, _log, Fail));
 
     /// <summary>Sizes an unbuilt game chain from the game's captured size when the snapshot has <c>matchSource</c> on.</summary>
-    private EncoderChain SizedToSource(EncoderChain chain) => SizedToSource(chain, IsMonitor, _movingTo ?? _sourceSize);
-
-    /// <summary>The same sizing with the session kind and the game's size at the anchor passed in.</summary>
-    internal static EncoderChain SizedToSource(EncoderChain chain, bool isMonitor, VideoSize? source)
-    {
-        if (!isMonitor && chain.Spec.Snapshot.Video.MatchSource && source is { } captured
-            && SourceOutputSize.For(captured.Width, captured.Height, chain.Codec) is { } size)
-        {
-            chain.SizeTo(new VideoSize(size.Width, size.Height));
-        }
-
-        return chain;
-    }
+    private EncoderChain SizedToSource(EncoderChain chain) => chain.SizedToSource(IsMonitor, _movingTo ?? _sourceSize);
 
     /// <summary>Whether a size move may build its chain ahead (false while a Monitor Recording holds the other chain).</summary>
     public void SetBuildAhead(bool allowed) => _buildAhead = allowed;
@@ -609,7 +532,7 @@ internal sealed class CaptureSession : ICaptureSession
             }
 
             // Built under the gate, so a recovery's teardown can't dispose the device under this capture.
-            next = NewCapture(target.Window, device, CaptureFps());
+            next = _sources.ForWindow(target.Window, device, CaptureFps());
             _capture = next;
             _window = window;
         }
@@ -684,7 +607,7 @@ internal sealed class CaptureSession : ICaptureSession
             if (!anchored)
             {
                 var message = _failure?.Message ?? $"Capture stopped ({_stopReason}) before the first frame.";
-                return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : CodeOf(_failure), message));
+                return new SessionOutcome(null, _stopReason, new EngineFailure(_failure is null ? ErrorCodes.CaptureFailed : EngineFailure.CodeOf(_failure), message));
             }
 
             // A failed restart left nothing to flush, and a lost device's chain can't be flushed.
@@ -1060,7 +983,7 @@ internal sealed class CaptureSession : ICaptureSession
 
             if (switchTo is not null)
             {
-                var (encoder, codec) = ResolveEncoder(switchTo);
+                var (encoder, codec) = _encoderResolver.Resolve(switchTo);
                 next = NewChain(switchTo, encoder, codec, null, _device!);
                 next.Subscribe();
                 next.Build(_anchorQpc, first: false, latency: null);
@@ -1341,7 +1264,7 @@ internal sealed class CaptureSession : ICaptureSession
             device = _monitor is { } monitor
                 ? D3D11Device.CreateForMonitor(monitor.Handle, _loggers.CreateLogger<D3D11Device>())
                 : D3D11Device.Create(window!.Handle, _loggers.CreateLogger<D3D11Device>());
-            var (encoder, codec) = ReferenceEquals(spec, lost.Spec) ? (lost.EncoderName, lost.Codec) : ResolveEncoder(spec);
+            var (encoder, codec) = ReferenceEquals(spec, lost.Spec) ? (lost.EncoderName, lost.Codec) : _encoderResolver.Resolve(spec);
             next = NewChain(spec, encoder, codec, null, device);
             next.Subscribe();
 
@@ -1351,11 +1274,11 @@ internal sealed class CaptureSession : ICaptureSession
             if (IsMonitor)
             {
                 // WGC, else Desktop Duplication, as at Open; started here and installed below.
-                capture = StartMonitorCapture(device, next.Fps, c => c.Start());
+                capture = _sources.StartForMonitor(_composite, _monitor, device, next.Fps, c => c.Start());
             }
             else
             {
-                capture = NewCapture(window!.Handle, device, next.Fps);
+                capture = _sources.ForWindow(window!.Handle, device, next.Fps);
                 capture.Start();
             }
             var now = Stopwatch.GetTimestamp();
@@ -1717,78 +1640,6 @@ internal sealed class CaptureSession : ICaptureSession
         DisposeAll();
     }
 
-    internal static string CodeOf(Exception e) => e switch
-    {
-        EngineFailure f => f.Code,
-        ErrorCodeException c => c.Code,
-        _ => ErrorCodes.EncodeFailed,
-    };
-
-    /// <summary>A game window's WGC capture, not started; a WGC failure throws, with no fallback.</summary>
-    private WindowCapture NewCapture(nint window, D3D11Device device, int fps)
-    {
-        ThrowWgcFault();
-        return Wire(new WindowCapture(device, window, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
-    }
-
-    /// <summary>Starts the Monitor session's capture: WGC's monitor item, or Desktop Duplication when that throws.</summary>
-    private ICaptureSource StartMonitorCapture(D3D11Device device, int fps, Action<ICaptureSource> start)
-    {
-        if (_composite is not null)
-        {
-            var composite = NewComposite(device, fps);
-            try
-            {
-                start(composite);
-            }
-            catch
-            {
-                composite.Dispose();
-                throw;
-            }
-
-            if (composite.Sources.Where(s => s.Api == "desktop-duplication").Select(s => s.Placement.Monitor.DeviceName).ToList() is { Count: > 0 } duplicated)
-            {
-                _options.CaptureFallback?.Invoke(
-                    $"Windows Graphics Capture couldn't capture {string.Join(", ", duplicated)}; the Monitor Recording uses Desktop Duplication for it instead.");
-            }
-
-            return composite;
-        }
-
-        var monitor = _monitor!;
-        WindowCapture? wgc = null;
-        try
-        {
-            ThrowWgcFault();
-            wgc = Wire(WindowCapture.ForMonitor(device, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<WindowCapture>()));
-            start(wgc);
-            CaptureApi = "wgc";
-            return wgc;
-        }
-        catch (Exception e)
-        {
-            wgc?.Dispose();
-            _log.LogWarning("WGC could not capture monitor {Device} ({Message}); falling back to Desktop Duplication", monitor.DeviceName, e.Message);
-        }
-
-        var duplication = Wire(new DesktopDuplicationCapture(device, monitor.Handle, fps, OnFrame, _loggers.CreateLogger<DesktopDuplicationCapture>()));
-        try
-        {
-            start(duplication);
-        }
-        catch
-        {
-            duplication.Dispose();
-            throw;
-        }
-
-        CaptureApi = "desktop-duplication";
-        _options.CaptureFallback?.Invoke(
-            $"Windows Graphics Capture couldn't capture monitor {monitor.DeviceName}; the Monitor Recording uses Desktop Duplication instead.");
-        return duplication;
-    }
-
     /// <summary>Makes a capture the session's, then starts it, so a Closed it raises at once isn't taken for an old capture's.</summary>
     private void StartInstalled(ICaptureSource capture)
     {
@@ -1815,40 +1666,12 @@ internal sealed class CaptureSession : ICaptureSession
         }
     }
 
-    /// <summary>The composited capture of <see cref="_composite"/> on <paramref name="device"/>, not started.</summary>
-    private CompositeCapture NewComposite(D3D11Device device, int fps)
-    {
-        var forced = _options.DuplicationScreens;
-        var composite = Wire(new CompositeCapture(
-            device, _composite!, fps,
-            p => _options.CompositeDuplication || forced?.Contains(p.Monitor.DeviceName, StringComparer.OrdinalIgnoreCase) == true,
-            OnFrame, _loggers.CreateLogger<CompositeCapture>()));
-        CaptureApi = _options.CompositeDuplication ? "composite-desktop-duplication" : "composite";
-        return composite;
-    }
-
-    private void ThrowWgcFault()
-    {
-        if (_options.WgcFault?.Invoke() is { } fault)
-        {
-            throw fault;
-        }
-    }
-
     private int CaptureFps()
     {
         lock (_chainLock)
         {
             return _current?.Fps ?? _spec.Snapshot.Video.Fps;
         }
-    }
-
-    private T Wire<T>(T capture)
-        where T : ICaptureSource
-    {
-        capture.Closed += () => OnClosed(capture);
-        capture.Failed += Fail;
-        return capture;
     }
 
     private void OnFrame(long qpc, nint texture, VideoSize contentSize)
@@ -1906,41 +1729,6 @@ internal sealed class CaptureSession : ICaptureSession
                 current.Draw(qpc, texture, contentSize);
             }
         }
-    }
-
-    /// <summary>The encoder and codec for a spec: the forced encoder, else the probe's for its codec, else H.264's.</summary>
-    private (string Encoder, VideoCodec Codec) ResolveEncoder(SessionSpec spec)
-    {
-        if (_options.Encoder is { } forced)
-        {
-            var forcedCodec = EncoderProbe.CodecOf(forced)
-                ?? throw new EngineFailure(ErrorCodes.EncodeFailed, $"'{forced}' is not an H.264, HEVC or AV1 encoder in this FFmpeg build.");
-            _log.LogInformation("Encoder forced to {Encoder} ({Codec})", forced, forcedCodec);
-            return (forced, forcedCodec);
-        }
-
-        var codec = spec.Snapshot.Video.Codec;
-        string? encoder;
-        try
-        {
-            encoder = _encoders.EncoderFor(codec);
-        }
-        catch (Exception e) when (codec != VideoCodec.H264)
-        {
-            // Only H.264's own probe failing fails the session; any other codec's falls back.
-            _log.LogWarning("The {Codec} encoder probe failed: {Message}", codec, e.Message);
-            encoder = null;
-        }
-
-        if (encoder is not null)
-        {
-            return (encoder, codec);
-        }
-
-        _log.LogWarning("No {Codec} encoder works on this PC; the session falls back to H.264", codec);
-        return _encoders.EncoderFor(VideoCodec.H264) is { } fallback
-            ? (fallback, VideoCodec.H264)
-            : throw new EngineFailure(ErrorCodes.EncodeFailed, "No H.264 encoder works on this PC.");
     }
 
     /// <summary>The first frame is the session anchor: every stream's PTS 0 is its QPC. Under the gate.</summary>
@@ -2181,7 +1969,7 @@ internal sealed class CaptureSession : ICaptureSession
         EncoderChain? chain = null;
         try
         {
-            var (encoder, codec) = ResolveEncoder(spec);
+            var (encoder, codec) = _encoderResolver.Resolve(spec);
             chain = NewChain(spec, encoder, codec, null, _device!);
             chain.Subscribe();
             chain.Build(_anchorQpc, first: false, latency: null);

@@ -2,6 +2,7 @@ using System.Diagnostics;
 using Microsoft.Extensions.Logging;
 using Encore.Contracts;
 using Encore.Core.Audio;
+using Encore.Core.Output;
 using Encore.Core.Replay;
 using Encore.Core.Sessions;
 using Encore.Engine.Audio;
@@ -103,6 +104,18 @@ internal sealed class EncoderChain : IDisposable
         }
 
         OutputSize = size;
+    }
+
+    /// <summary>Sizes an unbuilt game chain from the game's captured size when the snapshot has <c>matchSource</c> on.</summary>
+    public EncoderChain SizedToSource(bool isMonitor, VideoSize? source)
+    {
+        if (!isMonitor && Spec.Snapshot.Video.MatchSource && source is { } captured
+            && SourceOutputSize.For(captured.Width, captured.Height, Codec) is { } size)
+        {
+            SizeTo(new VideoSize(size.Width, size.Height));
+        }
+
+        return this;
     }
 
     public int Fps => Spec.Snapshot.Video.Fps;

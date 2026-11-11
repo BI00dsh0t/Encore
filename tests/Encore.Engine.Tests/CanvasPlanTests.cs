@@ -32,9 +32,9 @@ public sealed class CanvasPlanTests
         MonitorPlacement[] uhdPlaced = [new(new MonitorInfo(2, uhd.DeviceName, false), 2560, 0, 3840, 2160, 144)];
         MonitorPlacement[] widePlaced = [new(new MonitorInfo(3, wide.DeviceName, false), 0, 0, 5120, 1440, 120)];
 
-        var (onUhd, composite) = CaptureSession.PlanCanvas(OneScreenSpec(uhd, matchSource: true), [uhd], uhdPlaced, _ => true, null, NullLogger.Instance);
-        var (onWide, _) = CaptureSession.PlanCanvas(OneScreenSpec(wide, matchSource: true), [wide], widePlaced, _ => true, null, NullLogger.Instance);
-        var (off, _) = CaptureSession.PlanCanvas(OneScreenSpec(uhd, matchSource: false), [uhd], uhdPlaced, _ => true, null, NullLogger.Instance);
+        var (onUhd, composite) = CanvasPlanner.Plan(OneScreenSpec(uhd, matchSource: true), [uhd], uhdPlaced, _ => true, null, NullLogger.Instance);
+        var (onWide, _) = CanvasPlanner.Plan(OneScreenSpec(wide, matchSource: true), [wide], widePlaced, _ => true, null, NullLogger.Instance);
+        var (off, _) = CanvasPlanner.Plan(OneScreenSpec(uhd, matchSource: false), [uhd], uhdPlaced, _ => true, null, NullLogger.Instance);
 
         Assert.Null(composite);
         Assert.Equal((VideoCodec.H264, 3840, 2160), (onUhd.Snapshot.Video.Codec, onUhd.Snapshot.Video.Width, onUhd.Snapshot.Video.Height));
@@ -57,7 +57,7 @@ public sealed class CanvasPlanTests
     {
         var warnings = new List<string>();
 
-        var (spec, composite) = CaptureSession.PlanCanvas(MonitorSpec, Screens, Placed, _ => true, (code, _) => warnings.Add(code), NullLogger.Instance);
+        var (spec, composite) = CanvasPlanner.Plan(MonitorSpec, Screens, Placed, _ => true, (code, _) => warnings.Add(code), NullLogger.Instance);
 
         Assert.Equal((VideoCodec.Hevc, 6400, 2160), (spec.Snapshot.Video.Codec, spec.Snapshot.Video.Width, spec.Snapshot.Video.Height));
         Assert.Equal(2, composite!.Count);
@@ -69,7 +69,7 @@ public sealed class CanvasPlanTests
     {
         var warnings = new List<string>();
 
-        var (spec, composite) = CaptureSession.PlanCanvas(MonitorSpec, Screens, Placed, c => c == VideoCodec.H264, (code, _) => warnings.Add(code), NullLogger.Instance);
+        var (spec, composite) = CanvasPlanner.Plan(MonitorSpec, Screens, Placed, c => c == VideoCodec.H264, (code, _) => warnings.Add(code), NullLogger.Instance);
 
         Assert.Equal((VideoCodec.H264, 4096, 1382), (spec.Snapshot.Video.Codec, spec.Snapshot.Video.Width, spec.Snapshot.Video.Height));
         Assert.NotNull(composite);
