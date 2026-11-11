@@ -23,6 +23,9 @@ internal partial class MainWindow
 
     internal override bool UsesMica => true;
 
+    /// <summary>Restores and saves the window's size and place; null in tests, which place the window themselves.</summary>
+    internal WindowPlacementKeeper? Placement { get; init; }
+
     /// <summary>Whether the window is in the player's full screen: for tests.</summary>
     internal bool IsFullScreen => _beforeFullScreen is not null;
 
@@ -47,8 +50,17 @@ internal partial class MainWindow
         Close();
     }
 
+    protected override void OnSourceInitialized(EventArgs e)
+    {
+        Placement?.Restore(this);
+        base.OnSourceInitialized(e);
+    }
+
+    // Closing hides the window to the tray or quits; either way its windowed size is saved, so full screen is left first.
     protected override void OnClosing(CancelEventArgs e)
     {
+        Model?.LeavePlayerFullScreen();
+        Placement?.Save(this);
         if (!_quitting)
         {
             e.Cancel = true;

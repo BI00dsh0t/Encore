@@ -70,3 +70,4 @@ GetDpiForWindow
 GetDpiForSystem
 GetSystemMetricsForDpi
 SYSTEM_METRICS_INDEX
+EnumDisplayMonitors
