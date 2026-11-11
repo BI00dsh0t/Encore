@@ -2,7 +2,7 @@ using Encore.Bench.GpuLoad;
 
 namespace Encore.Bench.Tests;
 
-/// <c>bench overlay</c> without a GPU: command lines, ready lines, a PresentMon CSV and the report. One test is Heavy.
+/// <summary><c>bench overlay</c> without a GPU: command lines, ready lines, a PresentMon CSV and the report. One test is Heavy.</summary>
 public sealed class OverlayBenchmarkTests : IDisposable
 {
     private readonly BenchRun _run = new();
@@ -106,7 +106,7 @@ public sealed class OverlayBenchmarkTests : IDisposable
         Assert.Equal([false, true, false], phases.Select(p => p.GetProperty("overlayWindowVisible").GetBoolean()));
     }
 
-    /// <c>bench fps --overlay</c> over the synthetic load with the real App; needs the GPU, PresentMon and the console.
+    /// <summary><c>bench fps --overlay</c> over the synthetic load with the real App; needs the GPU, PresentMon and the console.</summary>
     [Fact(Explicit = true)]
     [Trait("Category", "Heavy")]
     public void FpsWithTheOverlayOnRunsTheLoadWithTheAppsOverlay()
