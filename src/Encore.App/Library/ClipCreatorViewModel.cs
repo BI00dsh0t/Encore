@@ -1112,9 +1112,12 @@ internal sealed class ClipCreatorViewModel : Observable, IDisposable
 
     private async Task WorkAsync(Func<CancellationToken, Task> action)
     {
-        _operation?.Cancel();
+        var previous = _operation;
         using var operation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
+
+        // Claimed before the previous one is cancelled, so its ending, on whatever thread, never reads as current.
         _operation = operation;
+        previous?.Cancel();
         Busy = true;
         Progress = 0;
         try
