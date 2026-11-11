@@ -3,7 +3,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Core.Settings;
 
-/// <summary>The one settings <c>Resolve</c>.</summary>
+/// <summary>Works out the value in force for each setting: a game's own override, else the Global value, else the default.</summary>
 public static class SettingsResolver
 {
     /// <summary>Resolves every key for a Game Profile, or Global: the valid override, else the Global value, else the default.</summary>

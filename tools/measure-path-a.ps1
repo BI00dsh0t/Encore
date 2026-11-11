@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Measures Path A (story 1.2): the game's FPS with and without the tracer capturing it.
+    Measures Path A: the game's FPS with and without the tracer capturing it.
 
 .DESCRIPTION
     For each condition, records the game's presents with PresentMon for -Seconds. Capture
@@ -13,7 +13,7 @@
     Condition names: baseline, or capture followed by any of these suffixes, in any order
     (e.g. capture-x2-fast-thread):
       baseline       no capture; the game alone
-      app            no engine from this script: the caller (bench fps --recording, story 8.7) turns
+      app            no engine from this script: the caller (bench fps --recording) turns
                      the real App's capture on while the run settles; PresentMon only
       capture        capture with the tracer's defaults
       -p<N>          --gpu-priority N   (e.g. capture-p7)
@@ -22,9 +22,9 @@
       -wgc           WGC frames taken and released, no copy, no encode (--stages wgc)
       -x2            BGRA -> NV12 on the D3D11 VideoProcessor (--color x2)
       -fast          --nvenc-preset p1 --nvenc-tune ll
-      -thread        --encode-thread (no effect since story 1.11: the encoder thread is always on)
-      -ms            --match-source (story 12.2): the game chain at the game's own size, -Size only the fallback
-      -mon<mode>     spike 11.1: a second engine records a Monitor Recording beside the capture,
+      -thread        --encode-thread (no effect: the encoder thread is always on)
+      -ms            --match-source: the game chain at the game's own size, -Size only the fallback
+      -mon<mode>     a second engine records a Monitor Recording beside the capture,
                      debug-capture --monitors, for the same span, at -Fps; <mode> is one of
                        one     the primary monitor alone, H.264 at its size (today's Monitor Recording)
                        hevc    every monitor composited, HEVC at the full canvas size
@@ -87,7 +87,7 @@ param(
     [string] $InputDevice = '',
 
     # Passed to every capture condition's debug-capture as --size / --fps / --bitrate when given
-    # (story 1.14 runs 1920x1080 at 60 fps, CBR 20000 kbps). Empty / 0: the engine's own defaults.
+    # (the usual run is 1920x1080 at 60 fps, CBR 20000 kbps). Empty / 0: the engine's own defaults.
     [ValidatePattern('^(\d+x\d+)?$')]
     [string] $Size = '',
 
@@ -290,7 +290,7 @@ Clear-StaleSessions
 
 $principal = [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
 if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Fail 'This terminal is elevated. Run the measurement unelevated: the engine must run as it will in use (AD-7). Join "Performance Log Users" so PresentMon can trace without elevation.'
+    Fail 'This terminal is elevated. Run the measurement unelevated: the engine must run as it will in use. Join "Performance Log Users" so PresentMon can trace without elevation.'
 }
 
 if (-not $PresentMon) {

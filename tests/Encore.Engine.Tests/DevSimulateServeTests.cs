@@ -7,7 +7,7 @@ using Encore.Engine.Sessions;
 
 namespace Encore.Engine.Tests;
 
-/// <c>dev.simulate</c> over a real pipe: each faked outcome reaches the snapshot; the installed instance refuses it.
+/// <summary><c>dev.simulate</c> over a real pipe: each faked outcome reaches the snapshot; the installed instance refuses it.</summary>
 public sealed class DevSimulateServeTests : IAsyncLifetime
 {
     private static readonly TimeSpan Within = TimeSpan.FromSeconds(5);

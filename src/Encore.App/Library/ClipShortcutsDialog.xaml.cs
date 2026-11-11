@@ -2,6 +2,7 @@ using System.Windows;
 
 namespace Encore.App.Library;
 
+/// <summary>The help dialog that lists the clip creator's keyboard shortcuts.</summary>
 internal partial class ClipShortcutsDialog
 {
     internal ClipShortcutsDialog() => InitializeComponent();

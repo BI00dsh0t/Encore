@@ -24,16 +24,16 @@ public static class LibraryItemKinds
     public const string MonitorRecording = "monitorRecording";
 }
 
-/// <c>library.setFavourite</c>'s arguments: the item's identity as the App saw it, and the wanted flag.
+/// <summary><c>library.setFavourite</c>'s arguments: the item's identity as the App saw it, and the wanted flag.</summary>
 public sealed record LibrarySetFavourite(string Path, long Size, DateTimeOffset? Modified, bool Favourite);
 
-/// <c>library.rename</c>'s arguments: the item's identity and a new base name, without folder or extension.
+/// <summary><c>library.rename</c>'s arguments: the item's identity and a new base name, without folder or extension.</summary>
 public sealed record LibraryRename(string Path, long Size, DateTimeOffset? Modified, string NewName);
 
-/// <c>library.delete</c>'s arguments: the item's identity; the file goes to the Recycle Bin, never deleted for good.
+/// <summary><c>library.delete</c>'s arguments: the item's identity; the file goes to the Recycle Bin, never deleted for good.</summary>
 public sealed record LibraryDelete(string Path, long Size, DateTimeOffset? Modified);
 
-/// <c>library.itemRemoved</c>: the item at this relative path left the Library; Reason is set when the engine removed it.
+/// <summary><c>library.itemRemoved</c>: the item at this relative path left the Library; Reason is set if the engine removed it.</summary>
 public sealed record LibraryItemRemoved(string Path, string? Reason = null);
 
 /// <summary>The <see cref="LibraryItemRemoved.Reason"/> values.</summary>
@@ -43,19 +43,19 @@ public static class LibraryRemovalReasons
     public const string Cleanup = "cleanup";
 }
 
-/// <c>cleanup.preview</c>'s arguments: the limits to plan with, each null when off; nothing is deleted.
+/// <summary><c>cleanup.preview</c>'s arguments: the limits to plan with, each null when off; nothing is deleted.</summary>
 public sealed record LibraryCleanupPreview(long? MaxBytes, long? MaxAgeSeconds);
 
-/// <c>cleanup.preview</c>'s result: what a Cleanup pass with those limits would delete now, oldest first.
+/// <summary><c>cleanup.preview</c>'s result: what a Cleanup pass with those limits would delete now, oldest first.</summary>
 public sealed record LibraryCleanupPlan(int Count, long Bytes, IReadOnlyList<string> Paths);
 
 /// <summary><c>library.reset</c>: the Library is now exactly <see cref="Items"/>, e.g. after the Output Folder changed.</summary>
 public sealed record LibraryReset(IReadOnlyList<LibraryItem> Items);
 
-/// <c>library.folderChanged</c>: the Library now indexes this absolute Output Folder.
+/// <summary><c>library.folderChanged</c>: the Library now indexes this absolute Output Folder.</summary>
 public sealed record LibraryFolderChanged(string Folder);
 
-/// <c>library.cleanupBlockedChanged</c>: whether Cleanup is held off after the index was rebuilt from the folder.
+/// <summary><c>library.cleanupBlockedChanged</c>: whether Cleanup is held off after the index was rebuilt from the folder.</summary>
 public sealed record LibraryCleanupBlocked(bool Blocked);
 
 /// <summary>Library messages: the Library index and Cleanup; the LibraryActor is the only producer of the events.</summary>

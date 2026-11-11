@@ -5,6 +5,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Contracts.Messages;
 
+/// <summary>How serious a warning is, which decides how the App shows it.</summary>
 [JsonConverter(typeof(CamelCaseEnumConverter<WarningSeverity>))]
 public enum WarningSeverity
 {
@@ -13,7 +14,7 @@ public enum WarningSeverity
     Error,
 }
 
-/// <c>warning.raised</c>: a user-facing problem, active until it is dismissed. Fields: docs/code-notes.md.
+/// <summary><c>warning.raised</c>: a user-facing problem, active until it is dismissed. Fields: docs/code-notes.md.</summary>
 public sealed record Warning(
     string Id,
     string Code,

@@ -31,7 +31,7 @@ public sealed record HotkeyStatus(IReadOnlyList<HotkeyBindingStatus> Bindings)
     }
 }
 
-/// <c>hotkey.pressed</c>: a registered Hotkey was pressed; Qpc is the time the engine received <c>WM_HOTKEY</c>.
+/// <summary><c>hotkey.pressed</c>: a registered Hotkey was pressed; Qpc is the time the engine received <c>WM_HOTKEY</c>.</summary>
 public sealed record HotkeyPress(HotkeyAction Action, long Qpc);
 
 /// <summary>Hotkey messages: registration status and presses. The SessionOrchestrator publishes presses.</summary>

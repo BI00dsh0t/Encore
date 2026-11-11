@@ -49,7 +49,6 @@ public sealed class OutputSettingsTests : IDisposable
         }
         """;
 
-
     private static readonly TimeSpan Timeout = TimeSpan.FromSeconds(30);
 
     private readonly string _directory = Directory.CreateTempSubdirectory("rb-output-").FullName;

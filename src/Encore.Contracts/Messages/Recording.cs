@@ -4,10 +4,10 @@ using Encore.Contracts.Ipc;
 
 namespace Encore.Contracts.Messages;
 
-/// <c>recording.started</c>: a Recording is being written to <see cref="Path"/>; <c>recording.stopped</c> follows.
+/// <summary><c>recording.started</c>: a Recording is being written to <see cref="Path"/>; <c>recording.stopped</c> follows.</summary>
 public sealed record RecordingStarted(string Path);
 
-/// <c>recording.stopped</c>: the Recording has ended; Reason is a stop reason, or an error code when its writer failed.
+/// <summary><c>recording.stopped</c>: the Recording has ended; Reason is a stop reason, or an error code when its writer failed.</summary>
 public sealed record RecordingStopped(string Path, string Reason);
 
 /// <summary>Why a Recording stopped, as <see cref="RecordingStopped.Reason"/> carries it.</summary>

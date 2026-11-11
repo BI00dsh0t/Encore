@@ -3,6 +3,7 @@ using System.Windows.Input;
 
 namespace Encore.App.Settings;
 
+/// <summary>The Hotkeys page; its XAML binds to <see cref="HotkeysViewModel"/>.</summary>
 internal partial class HotkeysView
 {
     public HotkeysView()

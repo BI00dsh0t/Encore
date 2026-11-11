@@ -8,10 +8,7 @@
     <Using Remove="System.Windows.Forms" />
     <Using Remove="System.Drawing" />
   </ItemGroup>
-  <!--
-    WPF's Fluent theme puts Mica behind every window unless this switch is on, and caches the switch the
-    first time any window shows, so it is set in the runtimeconfig, from process start (AD-23; ThemeService). The test host shows the App's windows, so it needs it too.
-  -->
+  <!-- The test host shows the App's windows, so it needs the App's switch that keeps Mica off every window. -->
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
   </ItemGroup>

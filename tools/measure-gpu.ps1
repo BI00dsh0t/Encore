@@ -6,7 +6,7 @@
 .DESCRIPTION
     A process gets one counter instance per (luid, phys, eng) engine. On the RTX 5090 a process
     gets three identical engtype_VideoEncode instances (eng_6 to eng_8), each reporting the same
-    use, so summing them counted NVENC 3x (found by spike 11.1). Per sample, this takes the
+    use, so summing them counted NVENC 3x (found by an early GPU spike). Per sample, this takes the
     maximum over a process's instances of one type, as Task Manager does, then sums over
     processes; then the mean and max of those per-sample values.
 

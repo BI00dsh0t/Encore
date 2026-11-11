@@ -39,7 +39,6 @@ using var loggers = LoggerFactory.Create(builder => builder.SetMinimumLevel(LogL
 var log = loggers.CreateLogger("Engine");
 log.LogInformation("Encore engine, instance {Instance}, pid {Pid}", instance.Name, Environment.ProcessId);
 
-
 SetConsoleTitle(instance);
 if (parsed.Command is null)
 {

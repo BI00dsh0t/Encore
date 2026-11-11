@@ -162,21 +162,21 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
         }
     }
 
-    /// <c>library.setFavourite</c>: sets the Favourite when the identity matches; faults when it is stale.
+    /// <summary><c>library.setFavourite</c>: sets the Favourite when the identity matches; faults when it is stale.</summary>
     public Task SetFavourite(LibrarySetFavourite args)
     {
         ArgumentNullException.ThrowIfNull(args);
         return Post(done => new SetFavouriteRequest(args, done));
     }
 
-    /// <c>library.rename</c>: renames the item's file in its folder, keeping extension and metadata; faults when refused.
+    /// <summary><c>library.rename</c>: renames the item's file in place, keeping extension and metadata; faults when refused.</summary>
     public Task Rename(LibraryRename args)
     {
         ArgumentNullException.ThrowIfNull(args);
         return Post(done => new RenameRequest(args, done));
     }
 
-    /// <c>library.delete</c>: moves the item's file to the Recycle Bin and removes the item; faults when refused.
+    /// <summary><c>library.delete</c>: moves the item's file to the Recycle Bin and removes the item; faults when refused.</summary>
     public Task Delete(LibraryDelete args)
     {
         ArgumentNullException.ThrowIfNull(args);
@@ -192,7 +192,7 @@ public sealed partial class LibraryActor : ILibraryWrites, IDisposable
     /// <summary>The settings changed: when the <c>cleanup</c> limits differ from the last seen, a Cleanup pass may start.</summary>
     public void CleanupChanged() => _mailbox.Post(new CleanupTick(Changed: true));
 
-    /// <c>cleanup.preview</c>: what a pass with these limits would delete now, may it run or not; nothing is deleted.
+    /// <summary><c>cleanup.preview</c>: what a pass with these limits would delete now, may it run or not; nothing is deleted.</summary>
     public Task<LibraryCleanupPlan> PreviewCleanup(LibraryCleanupPreview args)
     {
         ArgumentNullException.ThrowIfNull(args);

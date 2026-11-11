@@ -158,6 +158,5 @@ internal sealed class WriterQueue(int maxQueued, TimeProvider time)
         _inFlightSince = null;
     }
 
-
     private readonly record struct Item(byte[] Frame, string? CoalesceKey, long EnqueuedAt);
 }

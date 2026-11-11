@@ -50,7 +50,7 @@ internal sealed record TracksReport(
     string Verdict,
     IReadOnlyList<string> Warnings);
 
-/// <c>bench tracks</c>: two devices play known signals into a four-Track capture, then the file is checked.
+/// <summary><c>bench tracks</c>: two devices play known signals into a four-Track capture, then the file is checked.</summary>
 internal static class TracksCheck
 {
     public const string FileName = "tracks.json";

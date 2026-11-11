@@ -52,7 +52,7 @@ internal sealed record OverlayReport(
     string? OverlayDot = null,
     IReadOnlyList<bool?>? OverlayPlanes = null);
 
-/// <c>bench overlay</c>: measures the load's presents with the Overlay's dot hidden, shown and hidden again.
+/// <summary><c>bench overlay</c>: measures the load's presents with the Overlay's dot hidden, shown and hidden again.</summary>
 internal static class OverlayBenchmark
 {
     public const string FileName = "overlay.json";
@@ -447,6 +447,7 @@ internal static class OverlayBenchmark
 internal sealed record PresentMonSummary(
     int Frames, double? AvgFps, double? OnePercentLowFps, string? DominantMode, IReadOnlyDictionary<string, double> ModePercent, string? Error);
 
+/// <summary>Reads a PresentMon capture file into the figures the overlay report shows.</summary>
 internal static class PresentMonCsv
 {
     /// <summary>Reads a PresentMon CSV: the frame time column of either version, and every present's mode.</summary>

@@ -8,7 +8,7 @@ internal abstract record SettingsSendResult
     /// <summary>The engine committed the ops; <c>settings.changed</c> for that revision has arrived or is on its way.</summary>
     public sealed record Committed(long Revision) : SettingsSendResult;
 
-    /// <c>settings-conflict</c>: the document moved on since the caller rendered it; Current is the one to reload.
+    /// <summary><c>settings-conflict</c>: the document moved on since the caller rendered it; Current is the one to reload.</summary>
     public sealed record Conflict(SettingsDocument Current) : SettingsSendResult;
 
     /// <summary>The engine refused the ops, or couldn't be reached.</summary>

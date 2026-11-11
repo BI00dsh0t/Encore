@@ -21,7 +21,7 @@ internal interface IOverlayHost : IDisposable
     bool WindowVisible();
 }
 
-/// <c>bench overlay --host app</c>: the real App on a throwaway test instance, its Overlay driven by <c>dev.simulate</c>.
+/// <summary><c>bench overlay --host app</c>: the real App on a test instance, its Overlay driven by <c>dev.simulate</c>.</summary>
 internal sealed class AppOverlayHost : IOverlayHost
 {
     public const string ExeName = "Encore.App.exe";

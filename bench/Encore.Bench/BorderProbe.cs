@@ -33,7 +33,7 @@ internal sealed class BorderProbe(string folder, TimeSpan delay)
             ? new BorderProbeResult(Classify(_ring, before, during), _ring, before, during, _beforeImage, _duringImage, null)
             : new BorderProbeResult("not-checked", _ring, _before ?? 0, _during ?? 0, _beforeImage, _duringImage, _error ?? "a screen grab did not run");
 
-    /// <c>yes</c> when the band gained at least 2 % of its pixels (and at least 50) in yellow during the capture.
+    /// <summary><c>yes</c> when the band gained at least 2 % of its pixels (and at least 50) in yellow during the capture.</summary>
     internal static string Classify(int ringPixels, int yellowBefore, int yellowDuring) =>
         ringPixels > 0 && yellowDuring - yellowBefore >= Math.Max(50, ringPixels * 0.02) ? "yes" : "no";
 

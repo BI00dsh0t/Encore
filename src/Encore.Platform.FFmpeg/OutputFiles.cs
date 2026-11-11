@@ -2,7 +2,7 @@ using Microsoft.Extensions.Logging;
 
 namespace Encore.Platform.FFmpeg;
 
-/// <summary>Removing what a failed write left on the disk.</summary>
+/// <summary>Deletes what a failed write left on the disk.</summary>
 internal static class OutputFiles
 {
     /// <summary>Deletes a file; a failure is logged as a warning, never thrown.</summary>

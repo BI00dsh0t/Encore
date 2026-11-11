@@ -17,7 +17,7 @@
     <FFmpegNativeDir>$(RepoRoot)native\ffmpeg\</FFmpegNativeDir>
   </PropertyGroup>
 
-  <!-- AD-14: the engine side builds with the trim and AOT analyzers, their warnings errors. -->
+  <!-- The engine side builds with the trim and AOT analyzers, and their warnings are errors. -->
   <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests')) and '$(MSBuildProjectName)' != 'Encore.App' and '$(MSBuildProjectName)' != 'Encore.Bench'">
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>

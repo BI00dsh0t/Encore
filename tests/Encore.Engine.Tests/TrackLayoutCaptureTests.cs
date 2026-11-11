@@ -11,7 +11,7 @@ using SettingsFlow = Encore.Contracts.Settings.AudioFlow;
 
 namespace Encore.Engine.Tests;
 
-/// <c>debug-capture --track-layout</c> end to end: one titled AAC stream per Track of the instance's layout.
+/// <summary><c>debug-capture --track-layout</c> end to end: one titled AAC stream per Track of the instance's layout.</summary>
 public sealed class TrackLayoutCaptureTests : IDisposable
 {
     private const string WindowScript =

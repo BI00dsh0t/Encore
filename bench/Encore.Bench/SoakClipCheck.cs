@@ -20,7 +20,7 @@ internal sealed record SoakClipResult(
     bool Pass,
     IReadOnlyList<string> Failures);
 
-/// <c>bench soak</c>'s check of each Clip: its Tracks by name, its length, and that the whole file decodes.
+/// <summary><c>bench soak</c>'s check of each Clip: its Tracks by name, its length, and that the whole file decodes.</summary>
 internal static class SoakClipCheck
 {
     public const double GopSeconds = 1;

@@ -2,6 +2,7 @@ using Encore.Contracts;
 
 namespace Encore.App;
 
+/// <summary>Starts the App: reads the command line, then runs <see cref="ShellApp"/> on the UI thread.</summary>
 internal static class Program
 {
     [STAThread]

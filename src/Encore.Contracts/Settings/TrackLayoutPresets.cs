@@ -2,7 +2,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.Contracts.Settings;
 
-/// <summary>The Audio Tracks presets.</summary>
+/// <summary>The ready-made Track Layouts the Audio Tracks page offers.</summary>
 public enum TrackLayoutPreset
 {
     /// <summary>One "Everything" Track: the default playback device and the default microphone, mute on.</summary>

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <CopyFFmpegNative>true</CopyFFmpegNative>
-    <!-- AD-14: the engine ships NativeAOT (spike 1.3); tools/publish-engine.ps1 publishes it. -->
+    <!-- The engine ships NativeAOT, which tools/publish-engine.ps1 publishes. -->
     <PublishAot>true</PublishAot>
   </PropertyGroup>
   <ItemGroup>
@@ -11,7 +11,7 @@
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Encore.Engine.Tests" />
-    <!-- Story 5.14's Overlay end-to-end test hosts the engine in-process beside the App's Overlay. -->
+    <!-- The Overlay end-to-end test hosts the engine in-process beside the App's Overlay. -->
     <InternalsVisibleTo Include="Encore.App.Tests" />
   </ItemGroup>
   <ItemGroup>

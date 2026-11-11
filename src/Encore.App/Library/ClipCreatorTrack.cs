@@ -2,6 +2,7 @@ using Encore.Contracts.Messages;
 
 namespace Encore.App.Library;
 
+/// <summary>One audio Track of the clip creator's source, with whether an export keeps it.</summary>
 internal sealed class ClipCreatorTrack : Observable
 {
     private bool _included = true;

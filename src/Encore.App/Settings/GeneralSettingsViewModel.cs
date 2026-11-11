@@ -14,7 +14,7 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender) : Settings
 
     public override string Title => "General";
 
-    /// <c>startWithWindows</c>: setting it sends the change; the Run value is written once the engine commits it.
+    /// <summary><c>startWithWindows</c>: setting it sends the change; the Run value is written once the engine commits it.</summary>
     public bool StartWithWindows
     {
         get => _startWithWindows;
@@ -43,14 +43,14 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender) : Settings
         new(AppTheme.GamingDark, "Gaming dark"),
     ];
 
-    /// <c>appTheme</c>: setting it sends the change; the App restyles only when the engine's commit comes back.
+    /// <summary><c>appTheme</c>: setting it sends the change; the App restyles only when the engine's commit comes back.</summary>
     public AppTheme AppTheme
     {
         get => _appTheme;
         set => SetAndSend(ref _appTheme, value, Keys.AppTheme);
     }
 
-    /// <c>captureNewGames</c>: whether a game found for the first time is captured; existing games keep their choice.
+    /// <summary><c>captureNewGames</c>: whether a game found for the first time is captured; existing games keep their choice.</summary>
     public bool CaptureNewGames
     {
         get => _captureNewGames;

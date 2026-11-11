@@ -6,7 +6,7 @@ using Encore.Platform.Windows;
 
 namespace Encore.Engine.Settings;
 
-/// <summary>Game Profile auto-creation.</summary>
+/// <summary>Creates a Game Profile for a game that has none yet, named from its executable.</summary>
 internal static class GameProfiles
 {
     /// <summary>Creates a Game Profile when the document lacks one, named from the executable. Rules: docs/code-notes.md.</summary>
