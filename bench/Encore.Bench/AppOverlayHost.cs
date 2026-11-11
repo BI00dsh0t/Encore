@@ -140,10 +140,20 @@ internal sealed class AppOverlayHost : IOverlayHost
     public static string DotName(OverlayDotMode mode) => DotModes.First(m => m.Value == mode).Key;
 
     /// <summary>The <c>--overlay-dot</c> option, or <see cref="OverlayDotMode.Auto"/>; throws for an unknown mode.</summary>
-    public static OverlayDotMode ParseDot(BenchOptions options) =>
-        options.Text("overlay-dot") is not { } text ? OverlayDotMode.Auto
-        : DotModes.TryGetValue(text, out var mode) ? mode
-        : throw new BenchUsageException($"--overlay-dot '{text}' is not one of {string.Join(", ", DotModes.Keys)}.");
+    public static OverlayDotMode ParseDot(BenchOptions options)
+    {
+        if (options.Text("overlay-dot") is not { } text)
+        {
+            return OverlayDotMode.Auto;
+        }
+
+        if (DotModes.TryGetValue(text, out var mode))
+        {
+            return mode;
+        }
+
+        throw new BenchUsageException($"--overlay-dot '{text}' is not one of {string.Join(", ", DotModes.Keys)}.");
+    }
 
     /// <summary>Whether the App has a visible Overlay window. It has no handle until it is first shown, so this looks each time.</summary>
     public bool WindowVisible()
@@ -306,9 +316,15 @@ internal sealed class AppOverlayHost : IOverlayHost
         }
 
         var final = buffer.ToString();
-        final = final.StartsWith(@"\\?\UNC\", StringComparison.Ordinal) ? @"\\" + final[8..]
-            : final.StartsWith(@"\\?\", StringComparison.Ordinal) ? final[4..]
-            : final;
+        if (final.StartsWith(@"\\?\UNC\", StringComparison.Ordinal))
+        {
+            final = @"\\" + final[8..];
+        }
+        else if (final.StartsWith(@"\\?\", StringComparison.Ordinal))
+        {
+            final = final[4..];
+        }
+
         return final.ToLowerInvariant();
     }
 

@@ -166,10 +166,17 @@ internal static class HotkeyBenchmark
     internal static HotkeyReport Result(KeyCombo combo, int requested, List<HotkeyPressTiming> timings, int unpaired, string? error, bool injected = false)
     {
         var ms = timings.Select(t => t.Ms).ToList();
-        string verdict = error is not null || ms.Count == 0
-            ? DriftMath.Inconclusive
-            : ms.Any(m => m >= TargetMs) ? DriftMath.Miss
-            : DriftMath.Pass;
+        bool hasTimings = error is null && ms.Count > 0;
+        string verdict = DriftMath.Pass;
+        if (!hasTimings)
+        {
+            verdict = DriftMath.Inconclusive;
+        }
+        else if (ms.Any(m => m >= TargetMs))
+        {
+            verdict = DriftMath.Miss;
+        }
+
         return new HotkeyReport(
             DateTimeOffset.Now,
             combo.Text,

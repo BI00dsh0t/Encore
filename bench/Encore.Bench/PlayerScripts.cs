@@ -51,12 +51,23 @@ internal static class PlayerScripts
             var wall = Number(root, "wallSeconds");
             var error = Text(root, "error");
             var kind = Text(root, "errorKind");
-            bool? plays = error is not null
-                ? kind == MediaFailure ? false : null
-                : played is { } p && wall is > 0 ? p >= wall.Value * 0.5 : null;
-            var labels = root.TryGetProperty("trackLabels", out var l) && l.ValueKind == JsonValueKind.Array
-                ? l.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() ?? "" : e.ToString()).ToList()
-                : null;
+            bool hasError = error is not null;
+            bool? plays = null;
+            if (hasError && kind == MediaFailure)
+            {
+                plays = false;
+            }
+            else if (!hasError && played is { } p && wall is > 0)
+            {
+                plays = p >= wall.Value * 0.5;
+            }
+
+            List<string>? labels = null;
+            if (root.TryGetProperty("trackLabels", out var l) && l.ValueKind == JsonValueKind.Array)
+            {
+                labels = l.EnumerateArray().Select(e => e.ValueKind == JsonValueKind.String ? e.GetString() ?? "" : e.ToString()).ToList();
+            }
+
             return new ScriptedPlayback(
                 player,
                 plays,
@@ -85,9 +96,13 @@ internal static class PlayerScripts
             return new PlayerCheck(result.Player, "not-checked", null, null, null, $"scripted check could not run: {result.Error}", Scripted);
         }
 
-        var tracks = result.AudioTracks is { } n
-            ? n.ToString(CultureInfo.InvariantCulture) + " listed" + (result.TrackLabels is { Count: > 0 } labels ? $" ({string.Join(", ", labels)})" : "")
-            : "not listed by the player";
+        var tracks = "not listed by the player";
+        if (result.AudioTracks is { } n)
+        {
+            var labelText = result.TrackLabels is { Count: > 0 } labels ? $" ({string.Join(", ", labels)})" : "";
+            tracks = n.ToString(CultureInfo.InvariantCulture) + " listed" + labelText;
+        }
+
         var notes = new List<string>();
         if (result.Plays == true)
         {
@@ -184,11 +199,16 @@ internal static class PlayerScripts
             _ = process.StandardOutput.ReadToEndAsync();
             _ = process.StandardError.ReadToEndAsync();
             var done = Task.WaitAny([result.Task, process.WaitForExitAsync()], timeout);
-            return done == 0
-                ? Parse(Chrome, result.Task.Result)
-                : done == 1
-                    ? Failed(Chrome, $"Chrome exited (code {process.ExitCode}) before the page reported")
-                    : Failed(Chrome, $"no report from the page within {timeout.TotalSeconds:0} s");
+            bool pageReported = done == 0;
+            if (pageReported)
+            {
+                return Parse(Chrome, result.Task.Result);
+            }
+
+            bool chromeExited = done == 1;
+            return chromeExited
+                ? Failed(Chrome, $"Chrome exited (code {process.ExitCode}) before the page reported")
+                : Failed(Chrome, $"no report from the page within {timeout.TotalSeconds:0} s");
         }
         catch (System.ComponentModel.Win32Exception e)
         {
@@ -356,9 +376,14 @@ internal static class PlayerScripts
                 // It is killed next anyway.
             }
 
-            return labels is { Count: >= 1 } && labels.Count >= audioStreams
-                ? new VlcListing(true, labels, null)
-                : new VlcListing(true, labels, $"VLC listed {labels?.Count ?? 0} of {audioStreams} audio streams within {timeout.TotalSeconds:0} s" + (lastError is null ? "" : $" ({lastError})"));
+            if (labels is { Count: >= 1 } && labels.Count >= audioStreams)
+            {
+                return new VlcListing(true, labels, null);
+            }
+
+            var errorText = lastError is null ? "" : $" ({lastError})";
+            var why = $"VLC listed {labels?.Count ?? 0} of {audioStreams} audio streams within {timeout.TotalSeconds:0} s" + errorText;
+            return new VlcListing(true, labels, why);
         }
         catch (System.ComponentModel.Win32Exception e)
         {
@@ -508,9 +533,16 @@ internal static class PlayerScripts
             return null;
         }
 
-        var to = parts[1].Length == 0 ? length - 1
-            : long.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var end) ? Math.Min(end, length - 1)
-            : -1;
+        long to = -1;
+        if (parts[1].Length == 0)
+        {
+            to = length - 1;
+        }
+        else if (long.TryParse(parts[1], NumberStyles.None, CultureInfo.InvariantCulture, out var end))
+        {
+            to = Math.Min(end, length - 1);
+        }
+
         return to >= from ? (from, to) : null;
     }
 

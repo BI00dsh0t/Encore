@@ -356,7 +356,7 @@ internal static class DriftBenchmark
         var tracks = CheckTracks(scan, settings.FrameMs);
 
         var verdicts = new[] { av.Verdict, audioToAudio?.Verdict ?? DriftMath.Inconclusive };
-        var verdict = verdicts.Contains(DriftMath.Miss) ? DriftMath.Miss : verdicts.Contains(DriftMath.Inconclusive) ? DriftMath.Inconclusive : DriftMath.Pass;
+        var verdict = DriftMath.Worst(verdicts);
         return new DriftReport(
             DateTimeOffset.Now, minutes, engine, settings, log.OutputDevice, log.InputDevice, mp4, statsPath, exit, null, startup, scan.VideoFrames,
             av, audioToAudio, tracks, verdict, warnings);

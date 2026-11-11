@@ -159,7 +159,7 @@ internal static class Report
             Row("Capture-to-encoded latency, p99", Ms(c?.LatencyP99Ms), $"< {Num(1000.0 / fps.Capture.Fps)} ms", Mark(c?.LatencyP99Ms, 1000.0 / fps.Capture.Fps)),
             Row("Engine CPU, % of one core", Pct(c?.CpuPercentOneCore), "reported (§6.3: < 3 % of one CPU)", ""),
             Row("Managed allocations, steady state", c?.AllocBytesPerSecond is { } alloc ? $"{alloc:0} B/s" : "n/a", "~0", ""),
-            Row("Gen2 GCs, steady state (all capture runs)", c?.Gen2Collections?.ToString(CultureInfo.InvariantCulture) ?? "n/a", "0", c?.Gen2Collections is { } g ? (g == 0 ? DriftMath.Pass : DriftMath.Miss) : ""),
+            Row("Gen2 GCs, steady state (all capture runs)", c?.Gen2Collections?.ToString(CultureInfo.InvariantCulture) ?? "n/a", "0", ZeroMark(c?.Gen2Collections)),
         ]);
 
         md.AppendLine("| Run | Condition | Pass | Avg FPS | 1 % low | Loss | Fresh slots | Duplicates | Queue drops | Skipped slots | Latency p99 | CPU (1 core) | Alloc/s | GC 0/1/2 | PresentMode |");
@@ -330,11 +330,26 @@ internal static class Report
         foreach (var p in players)
         {
             // A pass needs both answers yes; a scripted check sees playback only and leaves A/V sync to a person.
-            var mark = p.Status != "checked" ? "not-checked"
-                : p.Plays == false || p.AvInSync == false ? DriftMath.Miss
-                : p.Plays == true && p.AvInSync == true ? DriftMath.Pass
-                : p.Method == PlayerScripts.Scripted && p.Plays == true ? "plays: pass; A/V sync: not-checked"
-                : "not-checked";
+            var mark = "not-checked";
+            if (p.Status == "checked")
+            {
+                bool failed = p.Plays == false || p.AvInSync == false;
+                bool passed = p.Plays == true && p.AvInSync == true;
+                bool scriptedPlays = p.Method == PlayerScripts.Scripted && p.Plays == true;
+                if (failed)
+                {
+                    mark = DriftMath.Miss;
+                }
+                else if (passed)
+                {
+                    mark = DriftMath.Pass;
+                }
+                else if (scriptedPlays)
+                {
+                    mark = "plays: pass; A/V sync: not-checked";
+                }
+            }
+
             md.AppendLine(CultureInfo.InvariantCulture, $"| {p.Player} | {YesNo(p.Plays)} | {YesNo(p.AvInSync)} | {Cell(p.AudioTracks)} | {Cell(p.Notes)} | {mark} |");
         }
 
@@ -444,8 +459,16 @@ internal static class Report
         }
     }
 
-    private static string OldBar(double? value, HotkeyReport hotkey) =>
-        value is not { } v ? "" : $"{Mark(v, hotkey.TargetMs)}; old bar {(v < hotkey.OldBarMs ? "met" : "not met")}";
+    private static string OldBar(double? value, HotkeyReport hotkey)
+    {
+        if (value is not { } v)
+        {
+            return "";
+        }
+
+        var oldBar = v < hotkey.OldBarMs ? "met" : "not met";
+        return $"{Mark(v, hotkey.TargetMs)}; old bar {oldBar}";
+    }
 
     private static T? Load<T>(string folder, string file, string name, List<string> errors, List<string> notRun)
         where T : class
@@ -547,7 +570,25 @@ internal static class Report
 
     private static string Row(string figure, string value, string target, string mark) => $"| {figure} | {value} | {target} | {mark} |";
 
-    private static string Mark(double? value, double below) => value is { } v ? (v < below ? DriftMath.Pass : DriftMath.Miss) : "";
+    private static string Mark(double? value, double below)
+    {
+        if (value is not { } v)
+        {
+            return "";
+        }
+
+        return v < below ? DriftMath.Pass : DriftMath.Miss;
+    }
+
+    private static string ZeroMark(long? count)
+    {
+        if (count is not { } value)
+        {
+            return "";
+        }
+
+        return value == 0 ? DriftMath.Pass : DriftMath.Miss;
+    }
 
     private static string Num(double? value) => value?.ToString("0.###", CultureInfo.InvariantCulture) ?? "n/a";
 
