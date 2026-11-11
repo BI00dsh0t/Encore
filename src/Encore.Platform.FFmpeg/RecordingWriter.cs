@@ -15,7 +15,7 @@ public sealed unsafe class RecordingWriter
     /// <summary>How long after a stop the writer waits for every stream to pass it.</summary>
     public static readonly TimeSpan StopWait = TimeSpan.FromSeconds(2);
 
-    /// <summary>The most held before K is known, in µs of the newest packet's time.</summary>
+    /// <summary>The most held while waiting for the first keyframe, K, in µs of the newest packet's time.</summary>
     public const long HoldUs = 2_000_000;
 
     /// <summary>The longest fragment, in µs of video time: a kill loses at most about this much.</summary>
