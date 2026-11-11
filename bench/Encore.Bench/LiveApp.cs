@@ -86,6 +86,9 @@ internal sealed class LiveApp : IDisposable
                 SettingsOp.SetGlobal(Keys.RecordHotkeyMode.Name, Keys.RecordHotkeyMode.ToJson(RecordHotkeyMode.Toggle)),
                 SettingsOp.SetGlobal(Keys.FeedbackSounds.Name, Keys.FeedbackSounds.ToJson(new FeedbackSounds(false, false, false, false, false))),
                 SettingsOp.SetGlobal(Keys.SaveCooldown.Name, Keys.SaveCooldown.ToJson(0)),
+
+                // A synthetic load is found only by its fullscreen window; one added by hand keeps its own choice.
+                SettingsOp.SetGlobal(Keys.CaptureFullscreenApps.Name, Keys.CaptureFullscreenApps.ToJson(true)),
             };
             var live = new LiveApp(app, instance, client, enginePid, clips, save, record);
             live.Update([.. all]);

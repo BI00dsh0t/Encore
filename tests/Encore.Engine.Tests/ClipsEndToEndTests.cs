@@ -58,7 +58,9 @@ public sealed class ClipsEndToEndTests : IDisposable
             NullLoggerFactory.Instance,
             hostOptions: new EngineHostOptions { Heartbeat = null, AppLauncher = new StayingLauncher(), Rewind = true });
         await using var client = await EngineClient.ConnectAsync(host.PipeName, cancellationToken: Token);
+        // The load is found only by its fullscreen window, so such apps are captured here.
         await UpdateAsync(client,
+            SettingsOp.SetGlobal(Keys.CaptureFullscreenApps.Name, Keys.CaptureFullscreenApps.ToJson(true)),
             SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(clips)),
             SettingsOp.SetGlobal(Keys.Video.Name, Keys.Video.ToJson(GlobalVideo)),
             SettingsOp.SetGlobal(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(FirstWindow)),
@@ -122,7 +124,9 @@ public sealed class ClipsEndToEndTests : IDisposable
         await using (var host = EngineHost.Start(instance, NullLoggerFactory.Instance, hostOptions: options))
         await using (var client = await EngineClient.ConnectAsync(host.PipeName, cancellationToken: Token))
         {
+            // The load is found only by its fullscreen window, so such apps are captured here.
             await UpdateAsync(client,
+                SettingsOp.SetGlobal(Keys.CaptureFullscreenApps.Name, Keys.CaptureFullscreenApps.ToJson(true)),
                 SettingsOp.SetGlobal(Keys.OutputFolder.Name, Keys.OutputFolder.ToJson(clips)),
                 SettingsOp.SetGlobal(Keys.Video.Name, Keys.Video.ToJson(GlobalVideo)),
                 SettingsOp.SetGlobal(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(NextWindow)),
