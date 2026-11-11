@@ -110,6 +110,51 @@
                                DataContext="{Binding Playback.Creator}"
                                Visibility="{Binding Converter={StaticResource NotEmpty}}" />
         <DockPanel x:Name="ListContent" Visibility="{Binding DrillIn.IsOpen, Converter={StaticResource Hidden}}">
+            <!-- The first-use tips, at the top until the user closes them once. -->
+            <ContentControl x:Name="Tips"
+                            DockPanel.Dock="Top"
+                            Margin="0,0,0,12"
+                            DataContext="{Binding Tips}"
+                            Style="{DynamicResource EncoreInfoBarTipStyle}"
+                            Visibility="{Binding IsShown, Converter={StaticResource Visible}}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <Control Width="32"
+                             Height="32"
+                             Margin="0,2,12,0"
+                             VerticalAlignment="Top"
+                             Style="{DynamicResource EncoreMarkStyle}" />
+                    <StackPanel Grid.Column="1">
+                        <TextBlock FontSize="{DynamicResource SubtitleTextBlockFontSize}" FontWeight="SemiBold" Text="Keep the moment." />
+                        <TextBlock Margin="0,6,0,0" TextWrapping="Wrap">
+                            <Run Text="While you play, Rewind keeps the last " /><Run Text="{Binding ClipLength, Mode=OneWay}" /><Run
+                                Text=" ready. Press " /><Run FontWeight="SemiBold" Text="{Binding SaveKey, Mode=OneWay}" /><Run
+                                Text=" to save it as a Clip." />
+                        </TextBlock>
+                        <TextBlock Margin="0,4,0,0" TextWrapping="Wrap">
+                            <Run Text="Want the whole match? Allow Recordings for the game on its page in Games, then press " /><Run
+                                FontWeight="SemiBold"
+                                Text="{Binding RecordKey, Mode=OneWay}" /><Run Text="." />
+                        </TextBlock>
+                        <TextBlock Margin="0,6,0,0">
+                            <Hyperlink Command="{Binding ChangeHotkeysCommand}"
+                                       Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">Change hotkeys</Hyperlink>
+                        </TextBlock>
+                    </StackPanel>
+                    <Button Grid.Column="2"
+                            Margin="12,0,0,0"
+                            VerticalAlignment="Top"
+                            AutomationProperties.Name="Close tips"
+                            Command="{Binding CloseCommand}"
+                            Content="✕"
+                            Style="{DynamicResource EncoreLibraryClearSelectionButtonStyle}"
+                            ToolTip="Close" />
+                </Grid>
+            </ContentControl>
             <WrapPanel DockPanel.Dock="Top" Margin="0,0,0,8">
                 <!-- Each caption stays with its combo when the row wraps. -->
                 <!-- Search: a text box with a leading glyph, a hint while empty and a clear button while it has text. -->
@@ -360,79 +405,14 @@
                         </Style>
                     </TextBlock.Style>
                 </TextBlock>
-                <!-- The welcome card, only for a Library with nothing in it (no filter or search). -->
-                <Border x:Name="EmptyMessage"
-                        MaxWidth="520"
-                        HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        DataContext="{Binding Welcome}"
-                        Style="{DynamicResource EncoreCardStyle}">
-                    <Border.Visibility>
-                        <Binding Path="DataContext.ShowsWelcome"
-                                 RelativeSource="{RelativeSource AncestorType=UserControl}"
-                                 Converter="{StaticResource Visible}" />
-                    </Border.Visibility>
-                    <StackPanel>
-                        <StackPanel Margin="0,0,0,16" Orientation="Horizontal">
-                            <Control Width="64"
-                                     Height="64"
-                                     Style="{DynamicResource EncoreMarkStyle}" />
-                            <TextBlock Margin="16,0,0,0"
-                                       VerticalAlignment="Center"
-                                       FontSize="{DynamicResource TitleTextBlockFontSize}"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                       Text="Keep the moment." />
-                        </StackPanel>
-                        <WrapPanel>
-                            <TextBlock VerticalAlignment="Center"
-                                       FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                       Text="Play a game, then press " />
-                            <Border Margin="2,0,6,0"
-                                    Padding="8,2"
-                                    VerticalAlignment="Center"
-                                    Background="{DynamicResource ControlFillColorDefaultBrush}"
-                                    CornerRadius="{DynamicResource EncoreSmallCornerRadius}">
-                                <TextBlock FontWeight="SemiBold"
-                                           Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                           Text="{Binding SaveKey}" />
-                            </Border>
-                            <TextBlock VerticalAlignment="Center"
-                                       FontSize="20"
-                                       FontWeight="SemiBold"
-                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
-                                       Text="{Binding LeadTail}"
-                                       TextWrapping="Wrap" />
-                        </WrapPanel>
-                        <TextBlock Margin="0,12,0,0" TextWrapping="Wrap">
-                            <TextBlock.Style>
-                                <Style TargetType="TextBlock">
-                                    <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
-                                    <Style.Triggers>
-                                        <DataTrigger Binding="{Binding IsSilent}" Value="True">
-                                            <Setter Property="Foreground" Value="{DynamicResource SystemFillColorCautionBrush}" />
-                                        </DataTrigger>
-                                    </Style.Triggers>
-                                </Style>
-                            </TextBlock.Style>
-                            <Run Text="{Binding Audio, Mode=OneWay}" /><Run Text=" · " /><Hyperlink Command="{Binding ChangeAudioCommand}"
-                                Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"><Run
-                                Text="{Binding AudioLink, Mode=OneWay}" /></Hyperlink>
-                        </TextBlock>
-                        <TextBlock Margin="0,6,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap">
-                            <Run Text="{Binding Folder, Mode=OneWay}" /><Run Text=" · " /><Hyperlink
-                                Command="{Binding ChangeFolderCommand}"
-                                Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">Change</Hyperlink>
-                        </TextBlock>
-                        <TextBlock Margin="0,12,0,0"
-                                   FontSize="{DynamicResource CaptionTextBlockFontSize}"
-                                   Foreground="{DynamicResource TextFillColorSecondaryBrush}"
-                                   Text="{Binding Recordings}"
-                                   TextWrapping="Wrap" />
-                    </StackPanel>
-                </Border>
+                <!-- An empty Library, with no filter or search: one quiet line, not a card. -->
+                <TextBlock x:Name="EmptyMessage"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           FontSize="{DynamicResource BodyTextBlockFontSize}"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="No Clips or Recordings yet."
+                           Visibility="{Binding ShowsEmptyMessage, Converter={StaticResource Visible}}" />
             </Grid>
         </DockPanel>
     </Grid>

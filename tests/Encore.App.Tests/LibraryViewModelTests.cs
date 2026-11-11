@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.IO;
 using System.Windows;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
@@ -317,42 +318,56 @@ public sealed class LibraryViewModelTests
     }
 
     [Fact]
-    public void TheWelcomeCardShowsOnlyOnAnEmptyUnfilteredLibraryAndFollowsTheSettings()
+    public void TheTipsShowUntilClosedOnceAndTheEmptyLineOnlyOnAnEmptyUnfilteredLibrary()
     {
-        var viewModel = new MainViewModel(_engine, action => action()).Library;
-        Assert.True(viewModel.ShowsWelcome);
-        Assert.Equal("Audio: none yet — your Clips will be silent", viewModel.Welcome.Audio);
-        Assert.True(viewModel.Welcome.IsSilent);
-
-        var mic = new LayoutDevice(Guid.NewGuid(), "{in}", "Microphone", "Yeti", AudioFlow.Input, IsMic: true);
-        _engine.State = _engine.State! with
+        var firstUseFile = Path.Combine(Path.GetTempPath(), "encore-first-use-" + Guid.NewGuid().ToString("N"), "first-use.json");
+        try
         {
-            LibraryFolder = @"D:\Clips",
-            Settings = SettingsDocument.Empty with
+            var viewModel = new MainViewModel(_engine, action => action(), firstUseFile: firstUseFile).Library;
+            Assert.True(viewModel.Tips.IsShown);
+            Assert.True(viewModel.ShowsEmptyMessage);
+
+            _engine.State = _engine.State! with
             {
-                Revision = 2,
-                Global = SettingsMaps.EmptyValues
-                    .Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(90))
-                    .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(new HotkeyBinding(0x77, HotkeyModifiers.Control), null, null, null, null, null)))
-                    .Add(Keys.TrackLayout.Name, Keys.TrackLayout.ToJson(new TrackLayout([mic], [new Track(Keys.EverythingTrackId, "Everything", [mic.Key], true)]))),
-            },
-        };
-        _engine.RaiseChanged();
+                Settings = SettingsDocument.Empty with
+                {
+                    Revision = 2,
+                    Global = SettingsMaps.EmptyValues
+                        .Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(90))
+                        .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(
+                            new HotkeySettings(new HotkeyBinding(0x77, HotkeyModifiers.Control), null, null, null, null, null))),
+                },
+            };
+            _engine.RaiseChanged();
+            Assert.Equal(("Ctrl\u2060+\u2060F8", "1 min 30 s"), (viewModel.Tips.SaveKey, viewModel.Tips.ClipLength));
 
-        Assert.Equal(("Ctrl+F8", "to save the last 1 min 30 s as a Clip"), (viewModel.Welcome.SaveKey, viewModel.Welcome.LeadTail));
-        Assert.Equal(("Audio: Microphone", "Change"), (viewModel.Welcome.Audio, viewModel.Welcome.AudioLink));
-        Assert.Equal(@"Clips are saved in D:\Clips", viewModel.Welcome.Folder);
+            // Closed once, the tips stay closed, also for the next start.
+            viewModel.Tips.CloseCommand.Execute(null);
+            Assert.False(viewModel.Tips.IsShown);
+            Assert.False(new MainViewModel(_engine, action => action(), firstUseFile: firstUseFile).Library.Tips.IsShown);
 
-        viewModel.List.FavouritesOnly = true;
-        Assert.False(viewModel.ShowsWelcome);
-        viewModel.List.FavouritesOnly = false;
-        _engine.State = _engine.State with { Seq = 3, Library = [new LibraryItem("Game\\match.mp4", null, 10, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch, Kind: LibraryItemKinds.Recording), new LibraryItem("Game\\clip.mp4", null, 10, DateTimeOffset.UnixEpoch, false, Modified: DateTimeOffset.UnixEpoch, Kind: LibraryItemKinds.Clip)] };
-        _engine.RaiseChanged();
-        Assert.False(viewModel.ShowsWelcome);
+            viewModel.List.FavouritesOnly = true;
+            Assert.False(viewModel.ShowsEmptyMessage);
+            viewModel.List.FavouritesOnly = false;
+            var at = DateTimeOffset.UnixEpoch;
+            var match = new LibraryItem("Game\\match.mp4", null, 10, at, false, Modified: at, Kind: LibraryItemKinds.Recording);
+            var clip = new LibraryItem("Game\\clip.mp4", null, 10, at, false, Modified: at, Kind: LibraryItemKinds.Clip);
+            _engine.State = _engine.State with { Seq = 3, Library = [match, clip] };
+            _engine.RaiseChanged();
+            Assert.False(viewModel.ShowsEmptyMessage);
 
-        // The kind badge: a Recording's only.
-        var rows = viewModel.List.Entries.OfType<LibraryRow>().ToDictionary(r => r.Name, r => r.Badge);
-        Assert.Equal("Recording", rows["match.mp4"]);
-        Assert.Equal("", rows["clip.mp4"]);
+            // The kind badge: a Recording's only.
+            var rows = viewModel.List.Entries.OfType<LibraryRow>().ToDictionary(r => r.Name, r => r.Badge);
+            Assert.Equal("Recording", rows["match.mp4"]);
+            Assert.Equal("", rows["clip.mp4"]);
+        }
+        finally
+        {
+            var folder = Path.GetDirectoryName(firstUseFile)!;
+            if (Directory.Exists(folder))
+            {
+                Directory.Delete(folder, recursive: true);
+            }
+        }
     }
 }

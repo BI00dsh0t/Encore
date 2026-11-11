@@ -78,6 +78,12 @@
         <Setter Property="Background" Value="{DynamicResource SystemFillColorCautionBackgroundBrush}" />
         <Setter Property="BorderBrush" Value="{DynamicResource SystemFillColorCautionBrush}" />
     </Style>
+    <!-- The informational form, for tips: the accent's subtle fill and its edge. -->
+    <Style x:Key="EncoreInfoBarTipStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreInfoBarDangerStyle}">
+        <Setter Property="Background" Value="{DynamicResource EncoreAccentSubtleBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource AccentFillColorDefaultBrush}" />
+        <Setter Property="Padding" Value="16,12" />
+    </Style>
 
     <!-- Star toggle: the Library row's Favourite, borderless in both themes. -->
     <Style x:Key="EncoreStarToggleStyle" TargetType="ToggleButton">

@@ -171,18 +171,20 @@ public sealed class LibraryThemeTests
     });
 
     [Fact]
-    public void TheWelcomeCardABadgedRowAndTheStatusHintLoadInBothThemes() => Sta.Run(() =>
+    public void TheFirstUseTipsTheEmptyLineABadgedRowAndTheStatusHintLoadInBothThemes() => Sta.Run(() =>
     {
-        // The welcome card on an empty Library, then a Recording's badge and the header's hint.
+        // The tips over an empty Library, then a Recording's badge and the header's hint.
         var engine = new FakeEngineSession { Reply = (_, _) => Empty.Value };
         var settings = SettingsDocument.Empty with
         {
             Global = SettingsMaps.EmptyValues
                 .Add(Keys.BufferWindow.Name, Keys.BufferWindow.ToJson(30))
-                .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(new HotkeyBinding(0x79, HotkeyModifiers.Alt), null, null, null, null, null))),
+                .Add(Keys.Hotkeys.Name, Keys.Hotkeys.ToJson(new HotkeySettings(
+                    new HotkeyBinding(0x79, HotkeyModifiers.Alt), null, new HotkeyBinding(0x78, HotkeyModifiers.Alt), null, null, null))),
         };
         engine.State = engine.State! with { Settings = settings, LibraryFolder = @"C:\Users\sam\Videos\Encore" };
-        var model = new MainViewModel(engine, action => action());
+        var firstUseFolder = Path.Combine(Path.GetTempPath(), "encore-first-use-" + Guid.NewGuid().ToString("N"));
+        var model = new MainViewModel(engine, action => action(), firstUseFile: Path.Combine(firstUseFolder, "first-use.json"));
         var window = new MainWindow { DataContext = model, WindowStartupLocation = WindowStartupLocation.Manual, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         var theme = ThemeService.ForWindow(window);
         try
@@ -198,7 +200,9 @@ public sealed class LibraryThemeTests
                 var view = (LibraryView)model.Library.View;
                 Sta.PumpUntil(() => view.IsLoaded, $"the Library to load under {which}");
                 Assert.True(((FrameworkElement)view.FindName("EmptyMessage")).IsVisible);
-                Save(window, $"library-welcome-{name}.png");
+                Assert.True(((FrameworkElement)view.FindName("Tips")).IsVisible);
+                Assert.False(((FrameworkElement)view.FindName("CommandBar")).IsVisible);
+                Save(window, $"library-tips-{name}.png");
 
                 engine.State = engine.State with
                 {
@@ -218,6 +222,8 @@ public sealed class LibraryThemeTests
         finally
         {
             window.CloseForQuit();
+            Directory.CreateDirectory(firstUseFolder);
+            Directory.Delete(firstUseFolder, recursive: true);
         }
     });
 
