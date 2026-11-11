@@ -53,7 +53,9 @@ To check a download is genuine, compare it with the release's `SHA256SUMS.txt`, 
 gh attestation verify EncoreApp-win-Setup.exe --repo BI00dsh0t/Encore
 ```
 
-Release binaries are built only by the release workflow in this repository, from a tagged commit.
+Release binaries are built only by the release workflow in this repository, from a tagged commit on `main` (or `develop`, for a beta).
+
+**Updates are signed.** Each release's update feed is signed with a key that only the release workflow can use, after the maintainer approves it. Encore carries the matching public key and ignores any feed whose signature doesn't verify. It then checks every update package's size and SHA-256 against that signed feed before installing it, and deletes a package that doesn't match.
 
 Encore sends nothing about you or your PC anywhere. It contacts GitHub only to check for updates, and you can turn that off.
 
