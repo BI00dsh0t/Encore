@@ -408,9 +408,28 @@ public sealed class ClipCreatorTests : IDisposable
     public async Task WaveformDisplayUsesEachWholeTrackMaximumWithoutChangingCachedAudioPeaks()
     {
         _media.TrackCount = 3;
-        _media.PeakAt = (track, index) => track == 3 ? 0 :
-            index == 1000 ? (track == 1 ? 0.2f : 0.8f) :
-            index == 45000 ? (track == 1 ? 0.1f : 0.4f) : 0;
+        static float PeakAt(int track, int index)
+        {
+            if (track == 3)
+            {
+                return 0;
+            }
+
+            bool isFirstTrack = track == 1;
+            if (index == 1000)
+            {
+                return isFirstTrack ? 0.2f : 0.8f;
+            }
+
+            if (index == 45000)
+            {
+                return isFirstTrack ? 0.1f : 0.4f;
+            }
+
+            return 0;
+        }
+
+        _media.PeakAt = PeakAt;
         using var viewModel = new ClipCreatorViewModel(Source, "source", _media, () => new FakePlayer());
         await viewModel.OpenAsync(0);
         viewModel.Zoom(3); await viewModel.RefreshAsync();
@@ -1149,12 +1168,22 @@ public sealed class ClipCreatorTests : IDisposable
             return request.Operation switch
             {
                 "probe" => new ClipMediaResponse("complete", Metadata: new(Duration, 1280, 720, 30,
-                    Enumerable.Range(1, TrackCount).Select(i => new ClipAudioTrack(i, i == 1 ? "Game" : i == 2 ? "Mic" : $"Track {i}", 48000, 2)).ToArray())),
+                    Enumerable.Range(1, TrackCount).Select(i => new ClipAudioTrack(i, TrackName(i), 48000, 2)).ToArray())),
                 "range" => new ClipMediaResponse("complete", Range: new(request.Start, request.End, request.Format == "mp3" ? "audioSamples48000" : "videoFrames")),
                 "waveform" => new ClipMediaResponse("complete", Waveforms: (request.Tracks ?? []).Select(i => new ClipWaveform(request.Start, request.End, i, new float[request.Bins])).ToArray()),
                 _ => Render(request),
             };
         }
+        private static string TrackName(int index)
+        {
+            if (index == 1)
+            {
+                return "Game";
+            }
+
+            return index == 2 ? "Mic" : $"Track {index}";
+        }
+
         private ClipMediaResponse Prepare(ClipMediaRequest request)
         {
             var tracks = new List<ClipPeakTrack>();

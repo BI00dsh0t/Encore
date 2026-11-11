@@ -30,9 +30,17 @@ public sealed partial class SessionOrchestratorTests
             // The process's windows, and whether each can be captured: Rocket League's placeholder first.
             var windows = new ConcurrentDictionary<nint, bool> { [1] = false };
             var wait = new CaptureWait(
-                target => windows.TryGetValue(target.Window, out var ok) && ok ? CaptureWindow.Of(target.Window)
-                    : windows.FirstOrDefault(w => w.Value) is { Value: true } other ? CaptureWindow.Of(other.Key)
-                    : CaptureWindow.None(Tiny),
+                target =>
+                {
+                    if (windows.TryGetValue(target.Window, out var ok) && ok)
+                    {
+                        return CaptureWindow.Of(target.Window);
+                    }
+
+                    return windows.FirstOrDefault(w => w.Value) is { Value: true } other
+                        ? CaptureWindow.Of(other.Key)
+                        : CaptureWindow.None(Tiny);
+                },
                 (_, why) => waiting.Writer.TryWrite(why),
                 (_, captured) => ended.Writer.TryWrite(captured))
             {
