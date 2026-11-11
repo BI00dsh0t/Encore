@@ -132,29 +132,37 @@ public sealed partial class ThemeTests
             var model = new MainViewModel(new FakeEngineSession(), action => action());
             var main = Offscreen(new MainWindow { DataContext = model });
             var mainTheme = ThemeService.ForWindow(main);
+            var settings = Offscreen(new SettingsWindow { DataContext = model.Settings });
+            var settingsTheme = ThemeService.ForWindow(settings);
             foreach (var which in Both)
             {
                 galleryTheme.Apply(which);
                 mainTheme.Apply(which);
+                settingsTheme.Apply(which);
                 gallery.Show();
                 main.Show();
+                settings.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(200));
                 Save(gallery, $"gallery-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
 
-                model.IsSettingsTabSelected = true;
                 foreach (var viewModel in model.SettingsViewModels)
                 {
-                    model.SelectedSettingsViewModel = viewModel;
+                    model.Settings.Select(viewModel);
                     Sta.Pump(TimeSpan.FromMilliseconds(50));
                     Assert.True(viewModel.View.IsLoaded, $"{viewModel.Title} didn't load under {which}");
                 }
 
-                model.SelectedNavItem = model.LibraryNav;
+                // A drill-in's breadcrumb, the Games page with a game open.
+                model.Settings.Select(model.GameProfiles);
+                model.GameProfiles.DrillIn.Open("game", "Game");
                 Sta.Pump(TimeSpan.FromMilliseconds(50));
+                Assert.True(((FrameworkElement)settings.FindName("Breadcrumb")).IsVisible, $"No breadcrumb under {which}");
+                model.GameProfiles.DrillIn.Close();
                 Assert.True(model.Library.View.IsLoaded, $"The Library didn't load under {which}");
             }
 
             gallery.Close();
+            settings.CloseForQuit();
             main.CloseForQuit();
             // Fluent's own ListBoxItem style traces a binding error while a container is detached; that is the framework's.
             var found = string.Join("", errors.Messages)

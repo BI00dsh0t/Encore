@@ -119,7 +119,7 @@ internal sealed class TrackLayoutViewModel : SettingsViewModel
     public bool HasSaveProblem => SaveProblem is not null;
 
     /// <summary>Whether the page is on screen; opening watches the draft's meters, closing unwatches and zeroes every level.</summary>
-    public bool IsOpen
+    public override bool IsOpen
     {
         get => _isOpen;
         set

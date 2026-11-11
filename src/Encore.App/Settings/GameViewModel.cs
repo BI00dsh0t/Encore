@@ -193,7 +193,7 @@ internal sealed class GameViewModel : SettingsViewModel
     public ICommand StopDetectingCommand { get; }
 
     /// <summary>Whether the page is on screen: the audio tracks editor meters only then.</summary>
-    public bool IsOpen
+    public override bool IsOpen
     {
         get => Tracks.IsOpen;
         set => Tracks.IsOpen = value;

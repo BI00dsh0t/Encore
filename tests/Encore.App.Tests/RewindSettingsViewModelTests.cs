@@ -160,7 +160,7 @@ public sealed class RewindSettingsViewModelTests
             Estimate = new StorageEstimate(ReplayStorage.Memory, 2_400_000_000, WorstCase: true, 1_000_000_000, ExceedsFree: true),
         };
         var model = Create();
-        model.SelectedSettingsViewModel = model.Rewind;
+        model.Settings.Select(model.Rewind);
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -169,7 +169,7 @@ public sealed class RewindSettingsViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedSettingsViewModel.View;
+            var view = model.Settings.SelectedPage.View;
             view.Measure(new Size(600, 500));
             view.Arrange(new Rect(0, 0, 600, 500));
             view.UpdateLayout();

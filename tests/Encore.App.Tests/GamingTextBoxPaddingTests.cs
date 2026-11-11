@@ -3,7 +3,6 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Media;
 using System.Windows.Media.Imaging;
-using Encore.App.Settings;
 using Encore.App.Theme;
 using Encore.Contracts.Settings;
 
@@ -26,7 +25,17 @@ public sealed class GamingTextBoxPaddingTests
             ShowActivated = false,
             ShowInTaskbar = false,
         };
+        var settings = new SettingsWindow
+        {
+            DataContext = model.Settings,
+            WindowStartupLocation = WindowStartupLocation.Manual,
+            Left = -30000,
+            Top = -30000,
+            ShowActivated = false,
+            ShowInTaskbar = false,
+        };
         ThemeService.ForWindow(window).Apply(AppTheme.GamingDark);
+        ThemeService.ForWindow(settings).Apply(AppTheme.GamingDark);
         try
         {
             window.Show();
@@ -35,11 +44,11 @@ public sealed class GamingTextBoxPaddingTests
             var offsets = Insets(window);
             Save(window, "gaming-textbox-library.png");
 
-            model.IsSettingsTabSelected = true;
-            model.SelectedSettingsViewModel = model.SettingsViewModels.OfType<RewindSettingsViewModel>().Single();
+            model.Settings.Select(model.Rewind);
+            settings.Show();
             Sta.Pump(TimeSpan.FromMilliseconds(150));
-            offsets.AddRange(Insets(window));
-            Save(window, "gaming-textbox-clips.png");
+            offsets.AddRange(Insets(settings));
+            Save(settings, "gaming-textbox-clips.png");
 
             // The Library's search box and the Clips page's cache-folder path box, at least.
             Assert.True(offsets.Count >= 2, $"Found {offsets.Count} text boxes");
@@ -47,6 +56,7 @@ public sealed class GamingTextBoxPaddingTests
         }
         finally
         {
+            settings.CloseForQuit();
             window.CloseForQuit();
         }
     });

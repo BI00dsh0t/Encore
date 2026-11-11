@@ -38,7 +38,7 @@ internal static class TrayMenu
                 StatusItem(model),
                 new Separator(),
                 Item("Open", open),
-                Item("Open Library", () => OpenLibrary(model, open)),
+                Item("Open Library", open),
                 Item("Open the Clips folder", () => OpenClipsFolder(model, openFolder ?? OpenInExplorer)),
                 new Separator(),
                 StartWithWindowsItem(model),
@@ -83,12 +83,6 @@ internal static class TrayMenu
         var binding = new Binding(nameof(model.General.StartWithWindows)) { Source = model.General, Mode = BindingMode.TwoWay };
         item.SetBinding(MenuItem.IsCheckedProperty, binding);
         return item;
-    }
-
-    private static void OpenLibrary(MainViewModel model, Action open)
-    {
-        model.SelectedNavItem = model.LibraryNav;
-        open();
     }
 
     private static void OpenClipsFolder(MainViewModel model, Action<string> openFolder)

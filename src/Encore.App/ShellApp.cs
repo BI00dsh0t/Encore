@@ -135,6 +135,7 @@ internal sealed class ShellApp(Instance instance) : Application
         {
             DataContext = model,
             Placement = WindowPlacementKeeper.ForFile(Path.Combine(instance.RoamingDataFolder, "window.json")),
+            SettingsPlacement = WindowPlacementKeeper.ForFile(Path.Combine(instance.RoamingDataFolder, "settings-window.json")),
         };
         if (instance.Name != Instance.InstalledName)
         {

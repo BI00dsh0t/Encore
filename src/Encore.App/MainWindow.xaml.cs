@@ -26,6 +26,12 @@ internal partial class MainWindow
     /// <summary>Restores and saves the window's size and place; null in tests, which place the window themselves.</summary>
     internal WindowPlacementKeeper? Placement { get; init; }
 
+    /// <summary>The Settings window's own size and place, handed to it when it is first opened.</summary>
+    internal WindowPlacementKeeper? SettingsPlacement { get; init; }
+
+    /// <summary>The Settings window, made the first time it opens and kept, hidden, until Quit.</summary>
+    internal SettingsWindow? Settings { get; private set; }
+
     /// <summary>Whether the window is in the player's full screen: for tests.</summary>
     internal bool IsFullScreen => _beforeFullScreen is not null;
 
@@ -43,9 +49,10 @@ internal partial class MainWindow
         Activate();
     }
 
-    /// <summary>Closes the window for good, on Quit.</summary>
+    /// <summary>Closes the window for good, on Quit, and the Settings window with it.</summary>
     public void CloseForQuit()
     {
+        Settings?.CloseForQuit();
         _quitting = true;
         Close();
     }
@@ -75,17 +82,19 @@ internal partial class MainWindow
         if (e.OldValue is MainViewModel old)
         {
             old.PropertyChanged -= OnModelPropertyChanged;
+            old.Settings.OpenRequested -= ShowSettings;
         }
 
         if (e.NewValue is MainViewModel model)
         {
             model.PropertyChanged += OnModelPropertyChanged;
+            model.Settings.OpenRequested += ShowSettings;
             ApplyFullScreen(model.IsPlayerFullScreen);
             ApplyNavigationWidth();
         }
     }
 
-    // A hidden window leaves full screen, and the view model pauses what only a shown window needs.
+    // A hidden window leaves full screen and takes the Settings window with it; the view model pauses what only a shown window needs.
     private void OnIsVisibleChanged(object sender, DependencyPropertyChangedEventArgs e)
     {
         if (Model is not { } model)
@@ -96,6 +105,7 @@ internal partial class MainWindow
         if (!IsVisible)
         {
             model.LeavePlayerFullScreen();
+            Settings?.Hide();
         }
 
         model.IsWindowShown = IsVisible;
@@ -128,26 +138,6 @@ internal partial class MainWindow
         {
             e.Handled = true;
         }
-        else if (e.Key == Key.Tab && (Keyboard.Modifiers & ModifierKeys.Control) != 0)
-        {
-            StepThroughNavigation(model, backwards: (Keyboard.Modifiers & ModifierKeys.Shift) != 0);
-            e.Handled = true;
-        }
-    }
-
-    // Ctrl+Tab and Ctrl+Shift+Tab: the next or previous page, with focus on the control that chose it.
-    private void StepThroughNavigation(MainViewModel model, bool backwards)
-    {
-        model.NavigateBy(backwards ? -1 : 1);
-        Nav.UpdateLayout();
-        if (model.IsSettingsTabSelected)
-        {
-            SettingsSections.Focus();
-        }
-        else
-        {
-            (Nav.ItemContainerGenerator.ContainerFromItem(Nav.SelectedItem) as ListBoxItem)?.Focus();
-        }
     }
 
     // The mouse's Back button closes a drill-in item page.
@@ -159,59 +149,26 @@ internal partial class MainWindow
         }
     }
 
-    // Selecting the parent's nav item again goes back to its list.
+    // Choosing the Library again goes back to its list.
     private void OnNavClick(object sender, MouseButtonEventArgs e)
     {
-        if (e.OriginalSource is DependencyObject hit
-            && ItemsControl.ContainerFromElement(Nav, hit) is ListBoxItem { DataContext: NavItem item })
+        if (e.OriginalSource is DependencyObject hit && ItemsControl.ContainerFromElement(Nav, hit) is ListBoxItem)
         {
-            Model?.ReselectNavItem(item);
+            Model?.ReselectLibrary();
         }
     }
 
-    // Enter or Space on the selected nav item does what a click on it does.
+    // Enter or Space on the Library item does what a click on it does.
     private void OnNavKeyDown(object sender, KeyEventArgs e)
     {
-        if (e.Key is Key.Enter or Key.Space
-            && e.OriginalSource is ListBoxItem { DataContext: NavItem item }
-            && Model is { CurrentDrillIn.IsOpen: true } model)
+        if (e.Key is Key.Enter or Key.Space && e.OriginalSource is ListBoxItem && Model is { CurrentDrillIn.IsOpen: true } model)
         {
-            model.ReselectNavItem(item);
+            model.ReselectLibrary();
             e.Handled = true;
         }
     }
 
-    // On the preview event, so the current section is seen before the list commits and closes.
-    private void OnSettingsSectionClick(object sender, MouseButtonEventArgs e)
-    {
-        if (e.OriginalSource is DependencyObject hit
-            && ItemsControl.ContainerFromElement(SettingsSections, hit) is ComboBoxItem { DataContext: NavItem item })
-        {
-            Model?.ReselectNavItem(item);
-        }
-    }
-
-    // Enter or Space on the current section goes back to its list; any other key keeps the list's own behaviour.
-    private void OnSettingsSectionKeyDown(object sender, KeyEventArgs e)
-    {
-        if (e.Key is not (Key.Enter or Key.Space) || !SettingsSections.IsDropDownOpen || Model is not { } model)
-        {
-            return;
-        }
-
-        if (ReferenceEquals(HighlightedSection(), model.SelectedNavItem))
-        {
-            model.ReselectNavItem(model.SelectedNavItem);
-            SettingsSections.IsDropDownOpen = false;
-            e.Handled = true;
-        }
-    }
-
-    private NavItem? HighlightedSection() =>
-        SettingsSections.Items.Cast<NavItem>().FirstOrDefault(item =>
-            SettingsSections.ItemContainerGenerator.ContainerFromItem(item) is ComboBoxItem { IsHighlighted: true });
-
-    // The click has already flipped the toggle, so it is set back to checked: Settings stays the open tab.
+    // The click has already flipped the toggle, so it is set back to checked while the Settings window is open.
     private void OnSettingsClick(object sender, RoutedEventArgs e)
     {
         if (Model is { } model)
@@ -219,6 +176,13 @@ internal partial class MainWindow
             model.OpenSettings();
             SettingsButton.SetCurrentValue(ToggleButton.IsCheckedProperty, true);
         }
+    }
+
+    // The Settings window is owned by this one, made once and brought to the front on every request.
+    private void ShowSettings()
+    {
+        Settings ??= new SettingsWindow { DataContext = Model!.Settings, Owner = this, Placement = SettingsPlacement };
+        Settings.Open();
     }
 
     private void OnSizeChanged(object sender, SizeChangedEventArgs e) => ApplyNavigationWidth();

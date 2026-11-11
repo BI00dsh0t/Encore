@@ -199,7 +199,7 @@ public sealed class LibraryPlayerTests : IDisposable
     }
 
     [Fact]
-    public void TheLibrarysPlayerIsTheShellsDrillInAndLeavingTheLibraryClosesIt()
+    public void TheLibrarysPlayerIsTheShellsDrillInAndBackClosesIt()
     {
         _engine.State = State();
         var model = new MainViewModel(_engine, action => action(), player: () => _player);
@@ -209,7 +209,9 @@ public sealed class LibraryPlayerTests : IDisposable
         Assert.Same(model.Library.DrillIn, model.CurrentDrillIn);
         Assert.True(model.IsDrilledIn);
 
-        model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
+        model.OpenSettings(model.General);
+        Assert.True(model.IsDrilledIn);
+        Assert.True(model.GoBack());
 
         Assert.False(model.Library.DrillIn.IsOpen);
         Assert.True(_player.Disposed);

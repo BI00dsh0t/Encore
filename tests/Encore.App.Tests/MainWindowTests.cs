@@ -9,130 +9,93 @@ namespace Encore.App.Tests;
 [Collection(nameof(WpfCollection))]
 public sealed class MainWindowTests
 {
-    // Shared-shell execution remains deferred under the clip-creator-only clearance.
     [Fact]
-    public void NavigationWidthRetainsCurrentViewAndSettingsUsesASeparateBottomRoute() => Sta.Run(() =>
+    public void TheSettingsButtonOpensOneSettingsWindowAndEscOrHidingTheAppHidesIt() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var window = new MainWindow { DataContext = model, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
             window.Show(); window.UpdateLayout();
-            var view = model.CurrentView;
-            var selected = model.SelectedNavItem;
-            var navigation = (System.Windows.Controls.ListBox)window.FindName("Nav");
+            var navigation = (ListBox)window.FindName("Nav");
+            var button = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("SettingsButton");
+            void ClickSettings() => button.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
             Assert.Single(navigation.Items);
             model.IsNavigationExpanded = false;
             window.UpdateLayout();
-            Assert.Equal(58, ((System.Windows.Controls.ColumnDefinition)window.FindName("NavColumn")).Width.Value);
-            Assert.Same(view, model.CurrentView);
-            Assert.Same(selected, model.SelectedNavItem);
-            window.Width = 600; window.UpdateLayout();
-            Assert.Equal(58, ((System.Windows.Controls.ColumnDefinition)window.FindName("NavColumn")).Width.Value);
-            var settings = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("SettingsButton");
-            settings.RaiseEvent(new System.Windows.RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-            Assert.True(model.IsSettingsTabSelected);
-            Assert.Same(model.SettingsViewModels[0], model.SelectedSettingsViewModel);
-            Assert.False(model.IsNavigationExpanded);
-            var sections = (System.Windows.Controls.ComboBox)window.FindName("SettingsSections");
-            Assert.Equal(model.SettingsViewModels.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
-            model.IsNavigationExpanded = true;
-            Assert.Same(model.SelectedSettingsViewModel.View, model.CurrentView);
+            Assert.Equal(58, ((ColumnDefinition)window.FindName("NavColumn")).Width.Value);
+
+            // The window opens beside the Library; pressed again, the button brings back the same window.
+            ClickSettings();
+            var settings = Assert.IsType<SettingsWindow>(window.Settings);
+            Assert.True(settings.IsVisible);
+            Assert.Same(window, settings.Owner);
+            Assert.True(model.Settings.IsShown);
+            Assert.True(button.IsChecked);
+            Assert.Same(model.Library.View, model.CurrentView);
+            ClickSettings();
+            Assert.Same(settings, window.Settings);
+            Assert.Single(window.OwnedWindows);
+            Assert.True(button.IsChecked);
+
+            // Esc hides it, and so does the Main App hiding to the tray.
+            settings.RaiseEvent(Escape(settings));
+            Assert.False(settings.IsVisible);
+            Assert.False(model.Settings.IsShown);
+            Assert.False(button.IsChecked);
+            ClickSettings();
+            Assert.True(settings.IsVisible);
+            window.Close();
+            Assert.False(settings.IsVisible);
         }
         finally { window.CloseForQuit(); }
     });
 
     [Fact]
-    public void TheLibraryNavItemAndBackBothLeaveSettingsForTheLibrary() => Sta.Run(() =>
+    public void ALinkOpensSettingsAtItsPageAndTheSectionListShowsAndReturnsFromPages() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
         var window = new MainWindow { DataContext = model, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
-        var theme = Theme.ThemeService.ForWindow(window);
-        try
-        {
-            // Fluent at the default size with the pane expanded, then Gaming dark in a small window with the pane a rail.
-            var looks = new[]
-            {
-                (Contracts.Settings.AppTheme.Fluent, 1320.0, true),
-                (Contracts.Settings.AppTheme.GamingDark, 600.0, false),
-            };
-            foreach (var (which, width, expanded) in looks)
-            {
-                theme.Apply(which);
-                window.Width = width;
-                model.IsNavigationExpanded = expanded;
-                window.Show(); window.UpdateLayout();
-                var nav = (ListBox)window.FindName("Nav");
-                var settings = (System.Windows.Controls.Primitives.ToggleButton)window.FindName("SettingsButton");
-                var library = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromItem(model.LibraryNav);
-                void OpenSettings() => settings.RaiseEvent(new RoutedEventArgs(System.Windows.Controls.Primitives.ButtonBase.ClickEvent));
-
-                // Settings leaves the Library item unselected, so choosing it is a change the list acts on.
-                OpenSettings();
-                Assert.True(model.IsSettingsTabSelected);
-                Assert.False(library.IsSelected);
-                library.IsSelected = true;
-                Assert.False(model.IsSettingsTabSelected);
-                Assert.Same(model.Library.View, model.CurrentView);
-
-                // Back, and Esc, from a settings page's list return to the Library too.
-                OpenSettings();
-                Assert.True(model.GoBack());
-                Assert.False(model.IsSettingsTabSelected);
-                Assert.True(library.IsSelected);
-                OpenSettings();
-                Assert.True(model.HandleEscape());
-                Assert.False(model.IsSettingsTabSelected);
-            }
-        }
-        finally { window.CloseForQuit(); }
-    });
-
-    // Regression written for review; shell/Settings execution remains deferred.
-    [Fact]
-    public void CurrentSettingsSectionReselectionClosesDrillInWhileEscapeOnlyDismissesTheMenu() => Sta.Run(() =>
-    {
-        var model = new MainViewModel(new FakeEngineSession(), action => action());
-        model.SelectedNavItem = model.SettingsNavItems.Single(item => ReferenceEquals(item.ViewModel, model.GameProfiles));
-        var window = new MainWindow { DataContext = model, Width = 960, Height = 900, Left = -30000, Top = -30000, ShowActivated = false, ShowInTaskbar = false };
         try
         {
             window.Show(); window.UpdateLayout();
-            var sections = (ComboBox)window.FindName("SettingsSections");
-            var drillIn = model.CurrentDrillIn!;
-            void OpenSectionMenu()
-            {
-                drillIn.Open("test-game", "Test game");
-                sections.Focus();
-                sections.IsDropDownOpen = true;
-                window.UpdateLayout();
 
-                // The list highlights its current section on a dispatcher turn after it opens.
-                Sta.Pump(TimeSpan.FromMilliseconds(30));
-            }
-            OpenSectionMenu();
-            var current = (ComboBoxItem)sections.ItemContainerGenerator.ContainerFromItem(model.SelectedNavItem);
+            // The first-use tips' Change hotkeys link opens the window at Hotkeys.
+            model.Library.Tips.ChangeHotkeysCommand.Execute(null);
+            var settings = Assert.IsType<SettingsWindow>(window.Settings);
+            settings.UpdateLayout();
+            var sections = (ListBox)settings.FindName("Sections");
+            var page = (ContentControl)settings.FindName("Page");
+            Assert.True(settings.IsVisible);
+            Assert.Same(model.Hotkeys.View, page.Content);
+            Assert.Same(model.Settings.Sections.Single(s => s.ViewModel == model.Hotkeys), sections.SelectedItem);
+
+            // Choosing a section in the list shows its page and title.
+            var soundsSection = model.Settings.Sections.Single(s => s.ViewModel == model.FeedbackSounds);
+            var sounds = (ListBoxItem)sections.ItemContainerGenerator.ContainerFromItem(soundsSection);
+            sounds.IsSelected = true;
+            Assert.Same(model.FeedbackSounds.View, page.Content);
+            Assert.Equal("Sounds", ((ContentControl)settings.FindName("PageTitle")).Content);
+
+            // A game's page: choosing Games again, then Esc, each go back to the list before Esc closes the window.
+            model.Settings.Select(model.GameProfiles);
+            var drillIn = model.GameProfiles.DrillIn;
+            drillIn.Open("test-game", "Test game");
+            var games = (ListBoxItem)sections.ItemContainerGenerator.ContainerFromItem(model.Settings.SelectedSection);
             // The left-button event is direct, so the click is raised as the tunnelling mouse-up the section list hears.
             var click = new MouseButtonEventArgs(Mouse.PrimaryDevice, 0, MouseButton.Left) { RoutedEvent = Mouse.PreviewMouseUpEvent };
-            current.RaiseEvent(click);
+            games.RaiseEvent(click);
             Assert.False(drillIn.IsOpen);
-            sections.IsDropDownOpen = false;
-
-            foreach (var key in new[] { Key.Enter, Key.Space })
-            {
-                OpenSectionMenu();
-                sections.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(sections), 0, key) { RoutedEvent = Keyboard.PreviewKeyDownEvent });
-                Assert.False(drillIn.IsOpen);
-                Assert.False(sections.IsDropDownOpen);
-            }
-
-            OpenSectionMenu();
-            sections.RaiseEvent(new KeyEventArgs(Keyboard.PrimaryDevice, PresentationSource.FromVisual(sections), 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent });
-            Assert.False(sections.IsDropDownOpen);
-            Assert.True(drillIn.IsOpen);
+            drillIn.Open("test-game", "Test game");
+            settings.RaiseEvent(Escape(settings));
+            Assert.False(drillIn.IsOpen);
+            Assert.True(settings.IsVisible);
         }
         finally { window.CloseForQuit(); }
     });
+
+    private static KeyEventArgs Escape(Window window) =>
+        new(Keyboard.PrimaryDevice, PresentationSource.FromVisual(window), 0, Key.Escape) { RoutedEvent = Keyboard.KeyDownEvent };
 
     [Fact]
     public void TheWindowAllowsCaptureAndClosingItOnlyHidesIt() => Sta.Run(() =>

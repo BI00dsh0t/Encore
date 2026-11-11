@@ -15,42 +15,27 @@ namespace Encore.App.Tests;
 public sealed class ShellTests
 {
     [Fact]
-    public void EveryNavItemOpensItsPageAndTheOldSelectionPathsSelectTheirItem() => Sta.Run(() =>
+    public void EverySettingsSectionOpensItsPageAndTheMainWindowStaysOnTheLibrary() => Sta.Run(() =>
     {
         var model = new MainViewModel(new FakeEngineSession(), action => action());
 
-        Assert.Equal(
-            ["Library", "Settings", .. model.SettingsViewModels.Select(p => p.Title)],
-            model.NavItems.Select(i => i.Title));
-        Assert.Same(model.LibraryNav, model.SelectedNavItem);
-        foreach (var item in model.NavItems.Where(i => !i.IsSection))
+        Assert.Equal([model.LibraryNav], model.NavItems);
+        Assert.Equal(model.SettingsViewModels.Select(p => p.Title), model.Settings.Sections.Select(i => i.Title));
+        foreach (var section in model.Settings.Sections)
         {
-            model.SelectedNavItem = item;
-            Assert.Equal(item.Title, model.CurrentTitle);
-            Assert.Equal(item.ViewModel is not null, model.IsSettingsTabSelected);
-            Assert.Same(item.ViewModel?.View ?? model.Library.View, model.CurrentView);
+            model.Settings.SelectedSection = section;
+            Assert.Equal(section.Title, model.Settings.Title);
+            Assert.Same(section.ViewModel!.View, model.Settings.CurrentView);
+            Assert.Same(model.Library.View, model.CurrentView);
         }
 
-        // The section label is never selected, and the tray's path (IsSettingsTabSelected) selects the page's item.
-        model.SelectedNavItem = model.NavItems[1];
-        Assert.Same(model.LibrarySettings, model.SelectedNavItem.ViewModel);
-        model.IsSettingsTabSelected = false;
-        model.SelectedSettingsViewModel = model.Hotkeys;
-        Assert.Same(model.LibraryNav, model.SelectedNavItem);
-        model.IsSettingsTabSelected = true;
-        Assert.Same(model.Hotkeys, model.SelectedNavItem.ViewModel);
-
-        // Ctrl+Tab steps over the label and wraps round.
-        model.SelectedNavItem = model.LibraryNav;
-        model.NavigateBy(1);
-        Assert.Same(model.General, model.SelectedSettingsViewModel);
-        model.NavigateBy(-1);
-        model.NavigateBy(-1);
-        Assert.Same(model.LibrarySettings, model.SelectedNavItem.ViewModel);
+        // A cleared list selection keeps the page shown.
+        model.Settings.SelectedSection = null!;
+        Assert.Same(model.LibrarySettings, model.Settings.SelectedPage);
     });
 
     [Fact]
-    public void TheShellLoadsInBothThemesAndTheNavOpensEveryPage() => Sta.Run(() =>
+    public void TheShellAndTheSettingsWindowLoadInBothThemesWithAGamesPageOpen() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();
         engine.State = engine.State! with
@@ -58,6 +43,11 @@ public sealed class ShellTests
             Capture = CaptureState.Initial with { Replay = ReplayState.Buffering },
             TargetGame = new TargetGame(@"c:\games\valorant.exe", "Valorant", 7),
             Warnings = [new Warning("w1", "mic.unavailable", WarningSeverity.Warning, "audio", "The Mic device is unavailable; its Track records silence.", DateTimeOffset.Now, false, null, true)],
+            Settings = SettingsDocument.Empty with
+            {
+                Revision = 1,
+                Profiles = SettingsMaps.EmptyProfiles.Add(@"c:\games\valorant.exe", new GameProfile { Name = "Valorant" }),
+            },
         };
         var model = new MainViewModel(engine, action => action());
         var window = new MainWindow
@@ -71,29 +61,19 @@ public sealed class ShellTests
         };
         var theme = ThemeService.ForWindow(window);
         var nav = (ListBox)window.FindName("Nav");
-        var sections = (ComboBox)window.FindName("SettingsSections");
-        var pageHost = (ContentControl)window.FindName("Page");
         try
         {
             foreach (var which in new[] { AppTheme.Fluent, AppTheme.GamingDark })
             {
+                var name = which == AppTheme.Fluent ? "fluent" : "gaming-dark";
                 theme.Apply(which);
                 window.Show();
                 Sta.Pump(TimeSpan.FromMilliseconds(150));
 
-                // The nav list holds the Library; the settings pages are chosen in the section list.
+                // The nav list holds the Library; no section list is left in the main window.
                 Assert.Equal([model.LibraryNav], nav.Items.Cast<NavItem>());
-                Assert.Equal(model.SettingsViewModels.Select(p => p.Title), sections.Items.Cast<NavItem>().Select(i => i.Title));
-                foreach (var item in model.NavItems.Where(i => !i.IsSection))
-                {
-                    (item.ViewModel is null ? (System.Windows.Controls.Primitives.Selector)nav : sections).SelectedItem = item;
-                    Sta.Pump(TimeSpan.FromMilliseconds(30));
-                    Assert.Same(item.ViewModel?.View ?? model.Library.View, pageHost.Content);
-                    Assert.True(((FrameworkElement)pageHost.Content).IsLoaded, $"{item.Title} didn't load under {which}");
-                }
-
-                var peer = UIElementAutomationPeer.CreatePeerForElement(nav);
-                Assert.Single(peer.GetChildren());
+                Assert.Null(window.FindName("SettingsSections"));
+                Assert.Single(UIElementAutomationPeer.CreatePeerForElement(nav).GetChildren());
                 var library = (ListBoxItem)nav.ItemContainerGenerator.ContainerFromItem(model.LibraryNav);
                 var fill = (Border)library.Template.FindName("Fill", library);
                 NavPress.SetIsPressed(library, true);
@@ -101,11 +81,32 @@ public sealed class ShellTests
                 Assert.Equal(pressed.Color, ((SolidColorBrush)fill.Background).Color);
                 NavPress.SetIsPressed(library, false);
                 Assert.Equal("Library", ((TextBlock)library.Template.FindName("Label", library)).Text);
+                Save(window, $"shell-{name}.png");
 
-                model.SelectedNavItem = model.NavItems.First(i => i.ViewModel == model.General);
+                // The Settings window, each section through its list, then a game's page with its breadcrumb.
+                model.OpenSettings(model.General);
+                var settings = window.Settings!;
+                ThemeService.ForWindow(settings).Apply(which);
+                var sections = (ListBox)settings.FindName("Sections");
+                var pageHost = (ContentControl)settings.FindName("Page");
+                foreach (var section in model.Settings.Sections)
+                {
+                    sections.SelectedItem = section;
+                    Sta.Pump(TimeSpan.FromMilliseconds(30));
+                    Assert.Same(section.ViewModel!.View, pageHost.Content);
+                    Assert.True(((FrameworkElement)pageHost.Content).IsLoaded, $"{section.Title} didn't load under {which}");
+                }
+
+                model.Settings.Select(model.General);
                 Sta.Pump(TimeSpan.FromMilliseconds(100));
-                Save(window, $"shell-{(which == AppTheme.Fluent ? "fluent" : "gaming-dark")}.png");
-                model.SelectedNavItem = model.LibraryNav;
+                Save(settings, $"settings-window-{name}.png");
+                model.Settings.Select(model.GameProfiles);
+                model.GameProfiles.Open(model.GameProfiles.Profiles[0]);
+                Sta.Pump(TimeSpan.FromMilliseconds(100));
+                Assert.True(((FrameworkElement)settings.FindName("Breadcrumb")).IsVisible);
+                Save(settings, $"settings-window-games-{name}.png");
+                model.GameProfiles.DrillIn.Close();
+                settings.Close();
             }
         }
         finally

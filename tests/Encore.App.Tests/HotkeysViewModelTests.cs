@@ -123,7 +123,7 @@ public sealed class HotkeysViewModelTests
     {
         _engine.State = _engine.State! with { Hotkeys = Status() };
         var model = Create();
-        model.SelectedSettingsViewModel = model.Hotkeys;
+        model.Settings.Select(model.Hotkeys);
         model.Hotkeys.StartCapture(HotkeyAction.MicMute);
 
         var errors = new BindingErrors();
@@ -133,7 +133,7 @@ public sealed class HotkeysViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedSettingsViewModel.View;
+            var view = model.Settings.SelectedPage.View;
             view.Measure(new Size(600, 500));
             view.Arrange(new Rect(0, 0, 600, 500));
             view.UpdateLayout();

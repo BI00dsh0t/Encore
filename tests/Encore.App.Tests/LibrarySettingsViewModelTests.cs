@@ -147,7 +147,7 @@ public sealed class LibrarySettingsViewModelTests
             CleanupBlocked = true,
         };
         var model = new MainViewModel(_engine, action => action());
-        model.SelectedSettingsViewModel = model.LibrarySettings;
+        model.Settings.Select(model.LibrarySettings);
 
         var errors = new BindingErrors();
         var level = PresentationTraceSources.DataBindingSource.Switch.Level;
@@ -156,7 +156,7 @@ public sealed class LibrarySettingsViewModelTests
         PresentationTraceSources.DataBindingSource.Switch.Level = SourceLevels.Warning;
         try
         {
-            var view = model.SelectedSettingsViewModel.View;
+            var view = model.Settings.SelectedPage.View;
             view.Measure(new Size(600, 400));
             view.Arrange(new Rect(0, 0, 600, 400));
             view.UpdateLayout();
