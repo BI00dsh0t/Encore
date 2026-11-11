@@ -7,8 +7,8 @@
                  xmlns:theme="clr-namespace:Encore.App.Theme"
                  x:Name="Shell"
                  Title="Encore"
-                 Width="960"
-                 Height="600"
+                 Width="1320"
+                 Height="700"
                  MinWidth="480"
                  MinHeight="320"
                  KeyDown="OnKeyDown"
@@ -80,7 +80,7 @@
                 <ContentControl x:Name="BrandName"
                                 Margin="8,0,0,0"
                                 VerticalAlignment="Center"
-                                Content="{Binding Title, ElementName=Shell}"
+                                Content="Encore"
                                 Style="{DynamicResource EncoreBrandStyle}"
                                 Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
             </StackPanel>

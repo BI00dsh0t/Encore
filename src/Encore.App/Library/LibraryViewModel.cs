@@ -15,6 +15,7 @@ internal sealed class LibraryViewModel : Observable
     private readonly List<RelayCommand> _selectionCommands = [];
     private FrameworkElement? _view;
     private int _itemCount;
+    private bool _hasRendered;
 
     /// <summary>Each optional argument replaces a real dependency (thumbnails, shell, prompts, player) for tests.</summary>
     public LibraryViewModel(
@@ -93,8 +94,11 @@ internal sealed class LibraryViewModel : Observable
     /// <summary>The item pages' drill-in: the breadcrumb, Back and close of the player and the clip creator.</summary>
     public DrillIn DrillIn { get; }
 
-    /// <summary>Whether the welcome card shows: the Library holds nothing, with no filter or search.</summary>
-    public bool ShowsWelcome => _itemCount == 0 && !List.IsFiltered;
+    /// <summary>Whether the welcome card shows: a snapshot has come, and the Library holds nothing, with no filter or search.</summary>
+    public bool ShowsWelcome => _hasRendered && _itemCount == 0 && !List.IsFiltered;
+
+    /// <summary>Whether the command bar shows: a snapshot has come, and the welcome card isn't standing in for the list.</summary>
+    public bool ShowsCommandBar => _hasRendered && !ShowsWelcome;
 
     /// <summary>"Open in default player": hands the one selected item to the shell's default player, even while being written.</summary>
     public ICommand OpenCommand { get; }
@@ -134,10 +138,11 @@ internal sealed class LibraryViewModel : Observable
     {
         ArgumentNullException.ThrowIfNull(state);
         Welcome.Show(state);
-        if (_itemCount != state.Library.Count)
+        if (!_hasRendered || _itemCount != state.Library.Count)
         {
+            _hasRendered = true;
             _itemCount = state.Library.Count;
-            OnPropertyChanged(nameof(ShowsWelcome));
+            OnWelcomeChanged();
         }
 
         Banner.Show(state);
@@ -232,8 +237,14 @@ internal sealed class LibraryViewModel : Observable
         if (e.PropertyName is nameof(LibraryList.GameFilter) or nameof(LibraryList.DateFilter)
             or nameof(LibraryList.FavouritesOnly) or nameof(LibraryList.SearchText))
         {
-            OnPropertyChanged(nameof(ShowsWelcome));
+            OnWelcomeChanged();
         }
+    }
+
+    private void OnWelcomeChanged()
+    {
+        OnPropertyChanged(nameof(ShowsWelcome));
+        OnPropertyChanged(nameof(ShowsCommandBar));
     }
 
     private void SaveView() => List.ViewState(Playback.Volume, Playback.IsMuted).Save(_viewStateFile);

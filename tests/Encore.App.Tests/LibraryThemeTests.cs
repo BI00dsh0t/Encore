@@ -131,7 +131,12 @@ public sealed class LibraryThemeTests
         Layout(view);
         var empty = (FrameworkElement)view.FindName("EmptyMessage");
 
+        // Until the engine's first snapshot the Library knows nothing, so neither the welcome nor the command bar shows.
+        Assert.Equal(Visibility.Collapsed, empty.Visibility);
+        Assert.Equal(Visibility.Collapsed, ((FrameworkElement)view.FindName("CommandBar")).Visibility);
+        viewModel.Render(engine.State!);
         Assert.Equal(Visibility.Visible, empty.Visibility);
+        Assert.Equal(Visibility.Collapsed, ((FrameworkElement)view.FindName("CommandBar")).Visibility);
         viewModel.List.FavouritesOnly = true;
         Assert.Equal(Visibility.Collapsed, empty.Visibility);
         viewModel.List.FavouritesOnly = false;

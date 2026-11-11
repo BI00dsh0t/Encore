@@ -100,7 +100,10 @@ internal sealed class LibraryWelcome : Observable
 
         var toggles = SettingsValues.Global(settings, Keys.RecordHotkeyMode) == RecordHotkeyMode.Toggle;
         var record = toggles ? hotkeys.RecordToggle : hotkeys.RecordStart;
-        _recordKey = record is { } key ? HotkeyText.Describe(key) : "the Record key";
+        _recordKey = record is { } key ? KeepTogether(HotkeyText.Describe(key)) : "the Record key";
         OnPropertyChanged(nameof(Recordings));
     }
+
+    // Word joiners around each "+", so a wrapped line never splits a hotkey into "Alt" and "+F9".
+    private static string KeepTogether(string hotkey) => hotkey.Replace("+", "\u2060+\u2060", StringComparison.Ordinal);
 }

@@ -217,7 +217,10 @@
                        Text="{Binding Actions.ActionError}"
                        Visibility="{Binding Actions.HasActionError, Converter={StaticResource Visible}}" />
             <!-- The command bar: the summary with nothing selected, else the count and the actions. Always 40 px. -->
-            <Border x:Name="CommandBar" DockPanel.Dock="Top" Style="{DynamicResource EncoreLibraryCommandBarStyle}">
+            <Border x:Name="CommandBar"
+                    DockPanel.Dock="Top"
+                    Style="{DynamicResource EncoreLibraryCommandBarStyle}"
+                    Visibility="{Binding ShowsCommandBar, Converter={StaticResource Visible}}">
                 <Grid>
                     <StackPanel Orientation="Horizontal">
                         <StackPanel.Style>

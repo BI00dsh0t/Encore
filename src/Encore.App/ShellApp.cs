@@ -130,7 +130,11 @@ internal sealed class ShellApp(Instance instance) : Application
 
     private MainWindow CreateWindow(MainViewModel model)
     {
-        var window = new MainWindow { DataContext = model };
+        var window = new MainWindow
+        {
+            DataContext = model,
+            Placement = WindowPlacementKeeper.ForFile(Path.Combine(instance.RoamingDataFolder, "window.json")),
+        };
         if (instance.Name != Instance.InstalledName)
         {
             window.Title += $" ({instance.Name})";
