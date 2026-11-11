@@ -1,0 +1,104 @@
+<UserControl x:Class="Encore.App.Settings.GameProfilesView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Encore.App.Theme">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+        <theme:EmptyToCollapsedConverter x:Key="GroupHeaderVisible" />
+    </UserControl.Resources>
+    <Grid>
+        <!-- The list; hidden, not removed, while a game's page is open, so its scroll and selection stay. -->
+        <ScrollViewer x:Name="ListScroller"
+                      HorizontalScrollBarVisibility="Disabled"
+                      VerticalScrollBarVisibility="Auto">
+            <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+                <DockPanel Margin="0,0,0,12">
+                    <Button Margin="12,0,0,0"
+                            VerticalAlignment="Top"
+                            Command="{Binding AddGame.BrowseCommand}"
+                            Content="Add a game…"
+                            DockPanel.Dock="Right" />
+                    <TextBlock Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                               Text="Games are found when you play them. Each one uses the main settings unless you change them on its page."
+                               TextWrapping="Wrap" />
+                </DockPanel>
+                <TextBlock Margin="0,8"
+                           Foreground="{DynamicResource TextFillColorSecondaryBrush}"
+                           Text="No games yet. Play a game and it appears here, or add one by hand."
+                           TextWrapping="Wrap"
+                           Visibility="{Binding IsEmpty, Converter={StaticResource Visible}}" />
+                <ListBox x:Name="GameList"
+                         AutomationProperties.Name="Games"
+                         Background="{DynamicResource SubtleFillColorTransparentBrush}"
+                         BorderThickness="0"
+                         ItemContainerStyle="{DynamicResource EncoreGameRowStyle}"
+                         ItemsSource="{Binding Profiles}"
+                         KeyDown="OnListKeyDown"
+                         MouseLeftButtonUp="OnListClick"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled"
+                         ScrollViewer.VerticalScrollBarVisibility="Disabled"
+                         SelectionMode="Single"
+                         TextSearch.TextPath="Name">
+                    <ListBox.Template>
+                        <ControlTemplate TargetType="ListBox">
+                            <ItemsPresenter />
+                        </ControlTemplate>
+                    </ListBox.Template>
+                    <ListBox.GroupStyle>
+                        <GroupStyle>
+                            <GroupStyle.HeaderTemplate>
+                                <DataTemplate>
+                                    <ContentControl Margin="0,12,0,8"
+                                                    Content="{Binding Name}"
+                                                    Style="{DynamicResource EncoreSectionHeaderStyle}"
+                                                    Visibility="{Binding Name, Converter={StaticResource GroupHeaderVisible}}" />
+                                </DataTemplate>
+                            </GroupStyle.HeaderTemplate>
+                        </GroupStyle>
+                    </ListBox.GroupStyle>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate>
+                            <DockPanel>
+                                <Border DockPanel.Dock="Left" Style="{DynamicResource EncoreGameIconTileStyle}">
+                                    <Grid>
+                                        <TextBlock HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"
+                                                   FontWeight="SemiBold"
+                                                   Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}"
+                                                   Text="{Binding Initial}" />
+                                        <Image Source="{Binding Icon}"
+                                               Stretch="Uniform"
+                                               Visibility="{Binding HasIcon, Converter={StaticResource Visible}}" />
+                                    </Grid>
+                                </Border>
+                                <TextBlock DockPanel.Dock="Right" Style="{DynamicResource EncoreGamesChevronStyle}" />
+                                <Border DockPanel.Dock="Right"
+                                        Style="{DynamicResource EncoreGamesUnsavedDotStyle}"
+                                        ToolTip="Unsaved changes"
+                                        Visibility="{Binding HasUnsavedChanges, Converter={StaticResource Visible}}" />
+                                <StackPanel VerticalAlignment="Center">
+                                    <TextBlock Style="{DynamicResource EncoreGameNameStyle}" Text="{Binding Name}" />
+                                    <StackPanel Margin="0,2,0,0" Orientation="Horizontal">
+                                        <TextBlock Style="{DynamicResource EncoreGameCaptionStyle}" Text="{Binding Caption}" />
+                                        <Border Style="{DynamicResource EncorePillAccentStyle}"
+                                                Visibility="{Binding IsCapturing, Converter={StaticResource Visible}}">
+                                            <TextBlock Text="Capturing now" />
+                                        </Border>
+                                        <Border Style="{DynamicResource EncorePillNeutralStyle}"
+                                                Visibility="{Binding Ignored, Converter={StaticResource Visible}}">
+                                            <TextBlock Text="Not captured" />
+                                        </Border>
+                                    </StackPanel>
+                                </StackPanel>
+                            </DockPanel>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+            </theme:SettingsContent>
+        </ScrollViewer>
+
+        <!-- A game's page, in place of the list. -->
+        <ContentControl x:Name="GameHost" Focusable="False" />
+    </Grid>
+</UserControl>

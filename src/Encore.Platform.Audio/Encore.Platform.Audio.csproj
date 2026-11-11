@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>
+  </PropertyGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Encore.Platform.Audio.Tests" />
+    <!-- The device dropout AC builds the hub over fake clients. -->
+    <InternalsVisibleTo Include="Encore.Engine.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Windows.CsWin32" PrivateAssets="all" />
+    <PackageReference Include="Microsoft.Extensions.Logging.Abstractions" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Encore.Core\Encore.Core.csproj" />
+    <ProjectReference Include="..\Encore.Media\Encore.Media.csproj" />
+  </ItemGroup>
+</Project>

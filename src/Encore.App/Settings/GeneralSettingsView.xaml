@@ -1,0 +1,99 @@
+<UserControl x:Class="Encore.App.Settings.GeneralSettingsView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Encore.App.Theme">
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+            <HeaderedContentControl Header="Appearance" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Margin="0,6,12,0" VerticalAlignment="Top" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Theme" />
+                    <StackPanel Grid.Column="1">
+                        <ComboBox ItemsSource="{Binding AppThemeChoices, Mode=OneTime}"
+                                  DisplayMemberPath="Label"
+                                  SelectedValuePath="Theme"
+                                  SelectedValue="{Binding AppTheme}"
+                                  HorizontalAlignment="Left"
+                                  MinWidth="320" />
+                        <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="Applies at once to every window." />
+                    </StackPanel>
+                </Grid>
+            </HeaderedContentControl>
+            <HeaderedContentControl Header="Startup and Overlay" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Start with Windows, in the tray"
+                              IsChecked="{Binding StartWithWindows}" />
+                    <TextBlock Margin="0,12,0,4" Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Show the Overlay's dot" />
+                    <ComboBox ItemsSource="{Binding OverlayDotChoices, Mode=OneTime}"
+                              DisplayMemberPath="Label"
+                              SelectedValuePath="Mode"
+                              SelectedValue="{Binding OverlayDot}"
+                              HorizontalAlignment="Left"
+                              MinWidth="320" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="The small on-screen indicator that shows Encore is capturing." />
+                </StackPanel>
+            </HeaderedContentControl>
+            <HeaderedContentControl Header="Games" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Capture new games"
+                              IsChecked="{Binding CaptureNewGames}" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="When off, a game Encore finds for the first time is added to Games as Not captured. Games you add by hand are always captured." />
+                </StackPanel>
+            </HeaderedContentControl>
+            <HeaderedContentControl Header="About and updates" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Control Width="40"
+                                 Height="40"
+                                 VerticalAlignment="Top"
+                                 Style="{DynamicResource EncoreMarkStyle}" />
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                            <ContentControl Content="Encore" Style="{DynamicResource EncoreBrandStyle}" />
+                            <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}"
+                                       Text="{Binding Updates.VersionText, Mode=OneTime}" />
+                            <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                                       Text="{Binding About.Description, Mode=OneTime}" />
+                            <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap">
+                                <Hyperlink Command="{Binding About.OpenGitHubCommand, Mode=OneTime}"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">GitHub</Hyperlink><Run
+                                    Text=" · " /><Hyperlink Command="{Binding About.OpenLicenseCommand, Mode=OneTime}"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">License</Hyperlink><Run
+                                    Text=" · " /><Hyperlink Command="{Binding About.OpenNoticesCommand, Mode=OneTime}"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">Third-party notices</Hyperlink>
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+                    <CheckBox Margin="0,16,0,0"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Check for updates automatically"
+                              IsEnabled="{Binding Updates.CanUpdate, Mode=OneTime}"
+                              IsChecked="{Binding Updates.CheckAutomatically}" />
+                    <CheckBox Margin="0,8,0,0"
+                              FontSize="{DynamicResource BodyTextBlockFontSize}"
+                              Content="Get beta versions"
+                              IsEnabled="{Binding Updates.CanUpdate, Mode=OneTime}"
+                              IsChecked="{Binding Updates.Beta}" />
+                    <StackPanel Margin="0,12,0,0" Orientation="Horizontal">
+                        <Button Content="Check now" Command="{Binding Updates.CheckNowCommand, Mode=OneTime}" />
+                        <Button Margin="8,0,0,0"
+                                Content="Restart to update"
+                                Command="{Binding Updates.RestartToUpdateCommand, Mode=OneTime}" />
+                    </StackPanel>
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding Updates.Status}" />
+                </StackPanel>
+            </HeaderedContentControl>
+        </theme:SettingsContent>
+    </ScrollViewer>
+</UserControl>

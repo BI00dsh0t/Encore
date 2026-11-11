@@ -1,0 +1,39 @@
+using Encore.Contracts;
+using Encore.Contracts.Messages;
+using Encore.Core.Replay;
+using Encore.Engine.Ipc;
+
+namespace Encore.Engine.Sessions;
+
+/// <summary>Turns each memory margin event into one <c>memory-margin</c> warning; leaving the margin raises nothing.</summary>
+internal sealed class MemoryMarginReporter : IDisposable
+{
+    private readonly MemoryMargin _margin;
+    private readonly Warnings _warnings;
+    private int _disposed;
+
+    public MemoryMarginReporter(MemoryMargin margin, Warnings warnings)
+    {
+        _margin = margin;
+        _warnings = warnings;
+        _margin.Raised += OnRaised;
+    }
+
+    public void Dispose()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) == 0)
+        {
+            _margin.Raised -= OnRaised;
+        }
+    }
+
+    private void OnRaised(MemoryMarginEvent raised) =>
+        _warnings.Raise(
+            ErrorCodes.MemoryMargin,
+            WarningSeverity.Warning,
+            "replay",
+            raised == MemoryMarginEvent.ShortRing
+                ? "Memory is so low that Encore keeps less than 1 s of gameplay. Saving makes no Clip until memory frees up."
+                : "Memory is low, so Encore stopped keeping more gameplay. Clips may be shorter than your Clip length.",
+            overlay: false);
+}

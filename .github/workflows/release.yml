@@ -1,0 +1,334 @@
+name: Release
+
+# Every job starts read-only. Only `publish` can write to the repository, and it runs nothing but
+# GitHub's own CLI. Third-party tools (vpk, syft, git-cliff) run in jobs whose token can only read.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Build, test and publish
+    runs-on: windows-2025
+    timeout-minutes: 60
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      prerelease: ${{ steps.version.outputs.prerelease }}
+      artifact-id: ${{ steps.unsigned.outputs.artifact-id }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      # The tag arrives through an environment variable, never pasted into the script, and is checked first.
+      - name: Read and check the version
+        id: version
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          if ($env:TAG -notmatch '^v(\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?)$') { throw "The tag is not vX.Y.Z or vX.Y.Z-suffix." }
+          $version = $Matches[1]
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "prerelease=$($version.Contains('-').ToString().ToLowerInvariant())" >> $env:GITHUB_OUTPUT
+
+      # A stable release must be on main; a beta may also come from develop.
+      - name: Check the tag is on a release branch
+        shell: pwsh
+        env:
+          PRERELEASE: ${{ steps.version.outputs.prerelease }}
+        run: |
+          $branches = @('origin/main')
+          if ($env:PRERELEASE -eq 'true') { $branches += 'origin/develop' }
+          foreach ($branch in $branches) {
+            git merge-base --is-ancestor $env:GITHUB_SHA $branch
+            if ($LASTEXITCODE -eq 0) { "The tagged commit is on $branch."; exit 0 }
+          }
+          throw "The tagged commit is not on $($branches -join ' or '); releases come only from there."
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      # Always a fresh download, checked against the pinned archive and file hashes; never a cache.
+      - name: Fetch FFmpeg
+        shell: pwsh
+        run: ./tools/fetch-ffmpeg.ps1 -Force
+
+      - name: Build
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: dotnet build Encore.slnx -c Release -p:Version=${{ env.VERSION }}
+
+      # The runner's screen starts at 1024x768, smaller than the App's 960x900 layout tests need.
+      - name: Set the screen to 1920x1080
+        shell: pwsh
+        run: Set-DisplayResolution -Width 1920 -Height 1080 -Force
+
+      # Every project's default suite, as in CI. A test that needs hardware the runner lacks skips itself.
+      - name: Test
+        shell: pwsh
+        run: ./tools/test.ps1
+
+      - name: Publish
+        shell: pwsh
+        env:
+          VERSION: ${{ steps.version.outputs.version }}
+        run: ./tools/publish.ps1 -Version $env:VERSION
+
+      - name: Upload the unsigned app
+        id: unsigned
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-unsigned
+          path: publish/Encore
+          if-no-files-found: error
+
+  # Code signing: runs once SignPath Foundation has approved the project and the variables exist.
+  sign:
+    name: Sign the binaries
+    needs: build
+    if: vars.SIGNPATH_ORGANIZATION_ID != ''
+    runs-on: windows-2025
+    environment: release
+    timeout-minutes: 30
+    steps:
+      - name: Sign through SignPath
+        uses: signpath/github-action-submit-signing-request@f6d04783b4569d051e0c80105fe66e82819d0092 # v3.0
+        with:
+          api-token: ${{ secrets.SIGNPATH_API_TOKEN }}
+          organization-id: ${{ vars.SIGNPATH_ORGANIZATION_ID }}
+          project-slug: ${{ vars.SIGNPATH_PROJECT_SLUG }}
+          signing-policy-slug: ${{ vars.SIGNPATH_POLICY_SLUG }}
+          github-artifact-id: ${{ needs.build.outputs.artifact-id }}
+          wait-for-completion: true
+          output-artifact-directory: signed
+
+      - name: Upload the signed app
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: app-signed
+          path: signed
+          if-no-files-found: error
+
+  pack:
+    name: Pack the installer
+    needs: [build, sign]
+    if: always() && needs.build.result == 'success' && (needs.sign.result == 'success' || needs.sign.result == 'skipped')
+    runs-on: windows-2025
+    timeout-minutes: 30
+    env:
+      VERSION: ${{ needs.build.outputs.version }}
+      PRERELEASE: ${{ needs.build.outputs.prerelease }}
+      SIGNED: ${{ needs.sign.result == 'success' }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@0f4a354dd5547a28c70b7853dbd95d5b67886e73 # v6.1.0
+        with:
+          global-json-file: global.json
+
+      - name: Download the app
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: ${{ needs.sign.result == 'success' && 'app-signed' || 'app-unsigned' }}
+          path: publish/Encore
+
+      # vpk writes the installer, the portable zip, the full package and the update feed.
+      - name: Pack
+        shell: pwsh
+        run: |
+          dotnet tool install --global vpk --version 1.2.161
+          $channel = if ($env:PRERELEASE -eq 'true') { 'beta' } else { 'win' }
+          vpk pack --packId EncoreApp --packVersion $env:VERSION --packDir publish/Encore `
+            --mainExe Encore.App.exe --packTitle Encore --packAuthors BI00dsh0t --icon src/Encore.App/Icons/encore.ico `
+            --channel $channel --outputDir releases
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Write the software bill of materials
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        with:
+          path: publish/Encore
+          format: cyclonedx-json
+          output-file: releases/Encore-${{ env.VERSION }}-sbom.cdx.json
+          syft-version: v1.57.1
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Write the release notes
+        uses: orhun/git-cliff-action@a9a95522b26fe6403f7bb24031f21fb573d0f5ff # v4.9.1
+        with:
+          version: v2.14.2
+          config: cliff.toml
+          args: --latest --strip header
+        env:
+          OUTPUT: release-notes.md
+
+      - name: Add the FFmpeg source and signing lines
+        shell: pwsh
+        env:
+          REPOSITORY: ${{ github.repository }}
+        run: |
+          $script = Get-Content tools/fetch-ffmpeg.ps1 -Raw
+          $release = [regex]::Match($script, "\`$Release = '([^']+)'").Groups[1].Value
+          $asset = [regex]::Match($script, "\`$Asset = '([^']+)'").Groups[1].Value
+          $signing = if ($env:SIGNED -eq 'true') {
+            'The binaries are signed. Free code signing provided by SignPath.io, certificate by SignPath Foundation.'
+          } else {
+            'This release is not code signed yet, so Windows SmartScreen may warn before it runs.'
+          }
+          @"
+
+          ---
+
+          $signing
+
+          Encore ships FFmpeg, built with GPL components: [$asset](https://github.com/BtbN/FFmpeg-Builds/releases/tag/$release).
+          Its source is [FFmpeg](https://github.com/FFmpeg/FFmpeg) at the commit in that build's name, with the build scripts in
+          [BtbN/FFmpeg-Builds](https://github.com/BtbN/FFmpeg-Builds). See THIRD-PARTY-NOTICES.txt for every component's license.
+
+          Verify a download with ``gh attestation verify <file> --repo $env:REPOSITORY`` or against SHA256SUMS.txt.
+          "@ | Add-Content release-notes.md -Encoding utf8NoBOM
+          Move-Item release-notes.md releases/release-notes.md
+
+      - name: Upload the release files
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-files
+          path: releases
+          if-no-files-found: error
+
+  # The update feed's signature is what installed copies trust. The key lives only in the release
+  # environment, which waits for the maintainer's approval, and this job runs no third-party code.
+  sign-feed:
+    name: Sign the update feed
+    needs: pack
+    # A skipped `sign` would otherwise skip every job after it, so each one states its own condition.
+    if: ${{ !cancelled() && needs.pack.result == 'success' }}
+    runs-on: windows-2025
+    environment: release
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+          sparse-checkout: src/Encore.App/Updates/FeedSignature.cs
+          sparse-checkout-cone-mode: false
+
+      - name: Download the release files
+        uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: releases
+
+      - name: Sign and check each feed
+        shell: pwsh
+        env:
+          SIGNING_KEY: ${{ secrets.UPDATE_FEED_SIGNING_KEY }}
+        run: |
+          if ([string]::IsNullOrWhiteSpace($env:SIGNING_KEY)) { throw "The release environment has no UPDATE_FEED_SIGNING_KEY secret." }
+          $source = Get-Content src/Encore.App/Updates/FeedSignature.cs -Raw
+          $publicKey = [regex]::Match($source, '(?s)-----BEGIN PUBLIC KEY-----.*?-----END PUBLIC KEY-----').Value -replace '(?m)^\s+', ''
+          $signer = [System.Security.Cryptography.ECDsa]::Create()
+          $signer.ImportFromPem($env:SIGNING_KEY)
+          $checker = [System.Security.Cryptography.ECDsa]::Create()
+          $checker.ImportFromPem($publicKey)
+          $sha256 = [System.Security.Cryptography.HashAlgorithmName]::SHA256
+          $der = [System.Security.Cryptography.DSASignatureFormat]::Rfc3279DerSequence
+          $feeds = @(Get-ChildItem releases -Filter 'releases.*.json' -File)
+          if ($feeds.Count -eq 0) { throw 'vpk wrote no releases.<channel>.json feed.' }
+          New-Item -ItemType Directory signatures | Out-Null
+          foreach ($feed in $feeds) {
+            $bytes = [IO.File]::ReadAllBytes($feed.FullName)
+            $signature = $signer.SignData($bytes, $sha256, $der)
+            if (-not $checker.VerifyData($bytes, $signature, $sha256, $der)) { throw "The key doesn't match the public key in FeedSignature.cs." }
+            [IO.File]::WriteAllText("signatures/$($feed.Name).sig", [Convert]::ToBase64String($signature))
+            "Signed $($feed.Name)"
+          }
+
+      - name: Upload the feed signatures
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: feed-signatures
+          path: signatures
+          if-no-files-found: error
+
+  attest:
+    name: Checksums and provenance
+    needs: sign-feed
+    if: ${{ !cancelled() && needs.sign-feed.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      id-token: write
+      attestations: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-files
+          path: releases
+
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: feed-signatures
+          path: releases
+
+      - name: Write the checksums
+        run: |
+          cd releases
+          sha256sum $(ls | grep -v -e '^release-notes.md$' -e '^SHA256SUMS.txt$' | sort) > SHA256SUMS.txt
+
+      - name: Attest the build's provenance
+        uses: actions/attest-build-provenance@4d101475d8b20a2381f78447822ac1eab6504dd8 # v4.2.2
+        with:
+          subject-path: releases/*
+
+      - name: Upload the final release
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: release-final
+          path: releases
+          if-no-files-found: error
+
+  # The only job that can write. It runs GitHub's CLI and nothing else, and leaves a draft the
+  # maintainer smoke tests and publishes by hand; installed copies see nothing until then.
+  publish:
+    name: Upload the draft release
+    needs: [build, attest]
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.attest.result == 'success' }}
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          name: release-final
+          path: releases
+
+      - name: Create the draft
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          REPOSITORY: ${{ github.repository }}
+          TAG: ${{ github.ref_name }}
+          VERSION: ${{ needs.build.outputs.version }}
+          PRERELEASE: ${{ needs.build.outputs.prerelease }}
+        run: |
+          prerelease=()
+          if [ "$PRERELEASE" = "true" ]; then prerelease=(--prerelease); fi
+          files=$(ls releases/* | grep -v 'release-notes.md$')
+          gh release create "$TAG" --repo "$REPOSITORY" --draft --verify-tag "${prerelease[@]}" \
+            --title "Encore $VERSION" --notes-file releases/release-notes.md $files

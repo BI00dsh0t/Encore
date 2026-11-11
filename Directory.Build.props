@@ -7,14 +7,24 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
     <AnalysisLevel>latest</AnalysisLevel>
+    <!-- A local build's version; the release workflow passes the tag's. -->
+    <Version>0.0.0-dev</Version>
+    <!-- The app is English only, so the runtime's translated messages stay out of the package. -->
+    <SatelliteResourceLanguages>en</SatelliteResourceLanguages>
+    <!-- Lets GitHub's dependency graph restore these Windows-only projects on its Linux runners; builds still need Windows. -->
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <!-- The unused-using check (IDE0005) only runs on build with this on; undocumented members and parameters stay allowed. -->
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);CS1591;CS1573</NoWarn>
     <PlatformTarget>x64</PlatformTarget>
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
     <RepoRoot>$(MSBuildThisFileDirectory)</RepoRoot>
     <FFmpegNativeDir>$(RepoRoot)native\ffmpeg\</FFmpegNativeDir>
   </PropertyGroup>
 
-  <!-- AD-14: the engine side builds with the trim and AOT analyzers, their warnings errors. -->
-  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests')) and '$(MSBuildProjectName)' != 'ReplayBuffer.App' and '$(MSBuildProjectName)' != 'ReplayBuffer.Bench'">
+  <!-- The engine side builds with the trim and AOT analyzers, and their warnings are errors. -->
+  <PropertyGroup Condition="!$(MSBuildProjectName.EndsWith('.Tests')) and '$(MSBuildProjectName)' != 'Encore.App' and '$(MSBuildProjectName)' != 'Encore.Bench'">
     <IsAotCompatible>true</IsAotCompatible>
   </PropertyGroup>
 

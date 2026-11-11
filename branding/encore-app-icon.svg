@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img"><title>Encore</title><rect x="4" y="4" width="248" height="248" rx="54" fill="#0A0B0E"/><g color="#2DD4BF"><g transform="rotate(-45 128 128)">
+<path d="M 56.985917,87 A 82,82 0 1 0 128,46" fill="none" stroke="currentColor" stroke-width="28" stroke-linecap="butt"/>
+<circle cx="56.985917" cy="87" r="14" fill="currentColor"/>
+<path d="M 90,46 L 128,22 L 128,70 Z" fill="currentColor"/>
+</g></g></svg>

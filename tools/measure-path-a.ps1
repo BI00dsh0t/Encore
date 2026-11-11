@@ -1,7 +1,7 @@
 #Requires -Version 7
 <#
 .SYNOPSIS
-    Measures Path A (story 1.2): the game's FPS with and without the tracer capturing it.
+    Measures Path A: the game's FPS with and without the tracer capturing it.
 
 .DESCRIPTION
     For each condition, records the game's presents with PresentMon for -Seconds. Capture
@@ -13,6 +13,8 @@
     Condition names: baseline, or capture followed by any of these suffixes, in any order
     (e.g. capture-x2-fast-thread):
       baseline       no capture; the game alone
+      app            no engine from this script: the caller (bench fps --recording) turns
+                     the real App's capture on while the run settles; PresentMon only
       capture        capture with the tracer's defaults
       -p<N>          --gpu-priority N   (e.g. capture-p7)
       -m<N>          --gpu-priority -N  (e.g. capture-m7)
@@ -20,7 +22,18 @@
       -wgc           WGC frames taken and released, no copy, no encode (--stages wgc)
       -x2            BGRA -> NV12 on the D3D11 VideoProcessor (--color x2)
       -fast          --nvenc-preset p1 --nvenc-tune ll
-      -thread        --encode-thread (no effect since story 1.11: the encoder thread is always on)
+      -thread        --encode-thread (no effect: the encoder thread is always on)
+      -ms            --match-source: the game chain at the game's own size, -Size only the fallback
+      -mon<mode>     a second engine records a Monitor Recording beside the capture,
+                     debug-capture --monitors, for the same span, at -Fps; <mode> is one of
+                       one     the primary monitor alone, H.264 at its size (today's Monitor Recording)
+                       hevc    every monitor composited, HEVC at the full canvas size
+                       av1     every monitor composited, AV1 at the full canvas size
+                       h264    every monitor composited, H.264 fitted to 4096 px a side
+                       dd      as hevc, every monitor through Desktop Duplication
+                       hevccopy as hevc, but the monitor engine stops after the scale into the encoder's frames (--stages copy)
+                       hevcwgc  as hevc, but the monitor engine only captures and composites (--stages wgc)
+                     The GPU sampler then sums both engines.
 
     Writes into -OutDir: per run a PresentMon CSV, and for capture runs the engine's stats
     JSON, MP4, console log and GPU counter samples; then summary.csv, summary.json and
@@ -30,8 +43,8 @@
     as a member of "Performance Log Users" so PresentMon can trace without elevation. The
     script never starts the game and never downloads anything.
 
-    PresentMon traces in an ETW session named ReplayBuffer-PathA-<pid of this script>. Before
-    its setup checks the script stops any leftover ReplayBuffer-PathA-<pid> session whose pid
+    PresentMon traces in an ETW session named Encore-PathA-<pid of this script>. Before
+    its setup checks the script stops any leftover Encore-PathA-<pid> session whose pid
     has no running process (a killed earlier run's, which would otherwise make PresentMon lose
     events and write no CSV), and leaves a live run's session alone with a warning. It stops
     its own session after a killed PresentMon, a failed run, and at the end.
@@ -74,7 +87,7 @@ param(
     [string] $InputDevice = '',
 
     # Passed to every capture condition's debug-capture as --size / --fps / --bitrate when given
-    # (story 1.14 runs 1920x1080 at 60 fps, CBR 20000 kbps). Empty / 0: the engine's own defaults.
+    # (the usual run is 1920x1080 at 60 fps, CBR 20000 kbps). Empty / 0: the engine's own defaults.
     [ValidatePattern('^(\d+x\d+)?$')]
     [string] $Size = '',
 
@@ -87,14 +100,16 @@ param(
     # The PresentMon CLI. Default: the newest native/presentmon/PresentMon-*.exe under the repo root.
     [string] $PresentMon = '',
 
-    # The engine executable. Default: the newest built ReplayBuffer.Engine.exe under src/ReplayBuffer.Engine/bin.
+    # The engine executable. Default: the newest built Encore.Engine.exe under src/Encore.Engine/bin.
     [string] $Engine = '',
 
     # Where the run files and the summary go. Default: measurements/path-a-<timestamp> under the repo root.
     [string] $OutDir = '',
 
     # Skip the 1 s GPU Engine counter sampling: querying those counters can itself make a game stutter.
-    [switch] $NoGpuSampler
+    [switch] $NoGpuSampler,
+    # Spike 11.1 (-mon<mode>): the second engine's bitrate for a composited canvas.
+    [int] $MonitorBitrate = 40000
 )
 
 $ErrorActionPreference = 'Stop'
@@ -104,6 +119,7 @@ Set-StrictMode -Version Latest
 $Conditions = @($Conditions | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim() } | Where-Object { $_ })
 
 $RepoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
+. (Join-Path $PSScriptRoot 'measure-gpu.ps1')
 $WarmUpSeconds = 10   # CaptureStatsCollector.WarmUp: the engine leaves it out of its rates
 $EngineTailSeconds = 5 # the engine keeps capturing a little past PresentMon's window
 
@@ -112,19 +128,70 @@ function Fail([string] $Message) {
     exit 1
 }
 
+# Spike 11.1: the second engine's debug-capture options for a -mon<mode> suffix.
+function Resolve-MonitorOptions([string] $Mode, [string] $Name) {
+    $all = Get-MonitorCanvas
+    $bitrate = @('--bitrate', [string] $MonitorBitrate)
+    switch ($Mode) {
+        'one' { return @('--monitors', $all.Primary, '--codec', 'h264') }
+        'hevc' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
+        'av1' { return @('--monitors', 'all', '--codec', 'av1', '--size', $all.Size) + $bitrate }
+        'h264' { return @('--monitors', 'all', '--codec', 'h264') + $bitrate }
+        'dd' { return @('--monitors', 'all', '--monitor-api', 'dd', '--codec', 'hevc', '--size', $all.Size) + $bitrate }
+        'hevccopy' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size, '--stages', 'copy') + $bitrate }
+        'hevcwgc' { return @('--monitors', 'all', '--codec', 'hevc', '--size', $all.Size, '--stages', 'wgc') + $bitrate }
+        default { Fail "Unknown monitor mode '$Mode' in condition '$Name'. Use -monone, -monhevc, -monav1, -monh264, -mondd, -monhevccopy or -monhevcwgc." }
+    }
+}
+
+# Spike 11.1: the primary monitor's device name and the physical bounding box of every monitor
+# (even sides), from each display's current mode, whatever this process's DPI awareness.
+function Get-MonitorCanvas {
+    if (-not ('Encore.Displays' -as [type])) {
+        Add-Type -Namespace Encore -Name Displays -MemberDefinition @'
+[System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential, CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public struct DEVMODE {
+    [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)] public string dmDeviceName;
+    public short dmSpecVersion, dmDriverVersion, dmSize, dmDriverExtra; public int dmFields;
+    public int dmPositionX, dmPositionY; public int dmDisplayOrientation, dmDisplayFixedOutput;
+    public short dmColor, dmDuplex, dmYResolution, dmTTOption, dmCollate;
+    [System.Runtime.InteropServices.MarshalAs(System.Runtime.InteropServices.UnmanagedType.ByValTStr, SizeConst = 32)] public string dmFormName;
+    public short dmLogPixels; public int dmBitsPerPel, dmPelsWidth, dmPelsHeight, dmDisplayFlags, dmDisplayFrequency;
+    public int dmICMMethod, dmICMIntent, dmMediaType, dmDitherType, dmReserved1, dmReserved2, dmPanningWidth, dmPanningHeight;
+}
+[System.Runtime.InteropServices.DllImport("user32.dll", CharSet = System.Runtime.InteropServices.CharSet.Unicode)]
+public static extern bool EnumDisplaySettings(string device, int mode, ref DEVMODE devMode);
+'@
+    }
+
+    Add-Type -AssemblyName System.Windows.Forms
+    $left = [int]::MaxValue; $top = [int]::MaxValue; $right = [int]::MinValue; $bottom = [int]::MinValue
+    $primary = $null
+    foreach ($screen in [System.Windows.Forms.Screen]::AllScreens) {
+        $mode = New-Object Encore.Displays+DEVMODE
+        $mode.dmSize = [Runtime.InteropServices.Marshal]::SizeOf($mode)
+        if (-not [Encore.Displays]::EnumDisplaySettings($screen.DeviceName, -1, [ref] $mode)) { continue }
+        if ($screen.Primary) { $primary = $screen.DeviceName }
+        $left = [math]::Min($left, $mode.dmPositionX); $top = [math]::Min($top, $mode.dmPositionY)
+        $right = [math]::Max($right, $mode.dmPositionX + $mode.dmPelsWidth); $bottom = [math]::Max($bottom, $mode.dmPositionY + $mode.dmPelsHeight)
+    }
+
+    return [pscustomobject]@{ Primary = $primary; Size = ('{0}x{1}' -f (($right - $left) -band -2), (($bottom - $top) -band -2)) }
+}
+
 function Resolve-Condition([string] $Name) {
-    $condition = [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null; Stages = $null; EngineOptions = @() }
-    if ($Name -eq 'baseline') { return $condition }
+    $condition = [pscustomobject]@{ Name = $Name; Capture = $false; Priority = $null; Stages = $null; EngineOptions = @(); MonitorOptions = $null }
+    if ($Name -in 'baseline', 'app') { return $condition }
 
     $parts = $Name -split '-'
     if ($parts[0] -ne 'capture') {
-        Fail "Unknown condition '$Name'. Use baseline, or capture with suffixes -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread."
+        Fail "Unknown condition '$Name'. Use baseline, app, or capture with suffixes -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread."
     }
 
     $condition.Capture = $true
     $seen = @{}
     foreach ($suffix in $parts | Select-Object -Skip 1) {
-        $kind = if ($suffix -match '^[pm][0-7]$') { 'priority' } elseif ($suffix -in 'copy', 'wgc') { 'stages' } else { $suffix }
+        $kind = if ($suffix -match '^[pm][0-7]$') { 'priority' } elseif ($suffix -in 'copy', 'wgc') { 'stages' } elseif ($suffix -like 'mon*') { 'monitor' } else { $suffix }
         if ($seen.ContainsKey($kind)) { Fail "Condition '$Name' gives '$($seen[$kind])' and '$suffix'; use one." }
         $seen[$kind] = $suffix
 
@@ -137,7 +204,9 @@ function Resolve-Condition([string] $Name) {
             '^x2$' { $condition.EngineOptions += @('--color', 'x2') }
             '^fast$' { $condition.EngineOptions += @('--nvenc-preset', 'p1', '--nvenc-tune', 'll') }
             '^thread$' { $condition.EngineOptions += @('--encode-thread') }
-            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast or -thread." }
+            '^ms$' { $condition.EngineOptions += @('--match-source') }
+            '^mon' { $condition.MonitorOptions = Resolve-MonitorOptions $suffix.Substring(3) $Name }
+            default { Fail "Unknown suffix '$suffix' in condition '$Name'. Use -p<0-7>, -m<0-7>, -copy, -wgc, -x2, -fast, -thread, -ms or -mon<mode>." }
         }
     }
 
@@ -157,10 +226,10 @@ function Get-Percentile([double[]] $Sorted, [double] $P) {
 
 # --- ETW sessions --------------------------------------------------------------------------
 
-$SessionPrefix = 'ReplayBuffer-PathA-'
+$SessionPrefix = 'Encore-PathA-'
 $OwnSession = "$SessionPrefix$PID"
 
-# The running ReplayBuffer-PathA-<pid> sessions, from logman query -ets.
+# The running Encore-PathA-<pid> sessions, from logman query -ets.
 function Get-PathASessions {
     $lines = try { @(& logman query -ets 2>&1) } catch { @("$_") }
     if ($LASTEXITCODE -ne 0) {
@@ -221,7 +290,7 @@ Clear-StaleSessions
 
 $principal = [Security.Principal.WindowsPrincipal] [Security.Principal.WindowsIdentity]::GetCurrent()
 if ($principal.IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)) {
-    Fail 'This terminal is elevated. Run the measurement unelevated: the engine must run as it will in use (AD-7). Join "Performance Log Users" so PresentMon can trace without elevation.'
+    Fail 'This terminal is elevated. Run the measurement unelevated: the engine must run as it will in use. Join "Performance Log Users" so PresentMon can trace without elevation.'
 }
 
 if (-not $PresentMon) {
@@ -259,10 +328,10 @@ $needsEngine = @($plan | Where-Object { $_.Condition.Capture }).Count -gt 0
 if ($needsEngine) {
     if (-not $Engine) {
         # Only a Release build: Debug code skews the engine's CPU and allocation figures.
-        $built = Get-ChildItem -Path (Join-Path $RepoRoot 'src/ReplayBuffer.Engine/bin/Release') -Filter 'ReplayBuffer.Engine.exe' -File -Recurse -ErrorAction SilentlyContinue |
+        $built = Get-ChildItem -Path (Join-Path $RepoRoot 'src/Encore.Engine/bin/Release') -Filter 'Encore.Engine.exe' -File -Recurse -ErrorAction SilentlyContinue |
             Sort-Object LastWriteTime | Select-Object -Last 1
         if (-not $built) {
-            Fail 'No Release engine build. Run dotnet build ReplayBuffer.slnx -c Release, or pass -Engine <path>.'
+            Fail 'No Release engine build. Run dotnet build Encore.slnx -c Release, or pass -Engine <path>.'
         }
 
         $Engine = $built.FullName
@@ -295,11 +364,11 @@ if ($needsEngine) {
         Path = $Engine
         SizeBytes = (Get-Item $Engine).Length
         # A NativeAOT publish is one native exe; a normal build has the managed dll beside it.
-        NativeAot = -not (Test-Path (Join-Path $engineDir 'ReplayBuffer.Engine.dll'))
+        NativeAot = -not (Test-Path (Join-Path $engineDir 'Encore.Engine.dll'))
     }
 }
 
-$interopLines = (Get-ChildItem -Path (Join-Path $RepoRoot 'src') -Directory -Filter 'ReplayBuffer.Platform.*' |
+$interopLines = (Get-ChildItem -Path (Join-Path $RepoRoot 'src') -Directory -Filter 'Encore.Platform.*' |
     Get-ChildItem -Filter '*.cs' -File -Recurse | Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
     Get-Content | Measure-Object -Line).Lines
 
@@ -310,12 +379,12 @@ Write-Host "Runs:       $($plan.Count), output in $OutDir"
 
 # --- One run -------------------------------------------------------------------------------
 
-function Start-GpuSampler([int] $EnginePid, [int] $Samples) {
+function Start-GpuSampler([int[]] $EnginePid, [int] $Samples) {
     Start-Job -ArgumentList $EnginePid, $Samples -ScriptBlock {
         param($EnginePid, $Samples)
         $ErrorActionPreference = 'Stop'
         try {
-            $path = "\GPU Engine(pid_$($EnginePid)_*)\Utilization Percentage"
+            $path = @($EnginePid | ForEach-Object { "\GPU Engine(pid_$($_)_*)\Utilization Percentage" })
             Get-Counter -Counter $path -SampleInterval 1 -MaxSamples $Samples | ForEach-Object {
                 $time = $_.Timestamp
                 foreach ($sample in $_.CounterSamples) {
@@ -327,28 +396,6 @@ function Start-GpuSampler([int] $EnginePid, [int] $Samples) {
             [pscustomobject]@{ Error = "$($_.Exception.Message)" }
         }
     }
-}
-
-function Measure-GpuSamples($Samples) {
-    $errors = @($Samples | Where-Object { $_.PSObject.Properties['Error'] })
-    $rows = @($Samples | Where-Object { $_.PSObject.Properties['Instance'] })
-    if ($rows.Count -eq 0) {
-        $why = if ($errors.Count) { $errors[0].Error } else { 'no GPU Engine counter instances for the engine process' }
-        return [pscustomobject]@{ ByType = @{}; Error = $why }
-    }
-
-    # Per sample, sum the engines of one type; then the mean and max of those sums.
-    $byType = @{}
-    $rows | ForEach-Object {
-        $type = if ($_.Instance -match 'engtype_(.+)$') { $Matches[1] } else { 'unknown' }
-        [pscustomobject]@{ Time = $_.Time; Type = $type; Value = $_.Value }
-    } | Group-Object Type | ForEach-Object {
-        $sums = @($_.Group | Group-Object { $_.Time.Ticks } | ForEach-Object { ($_.Group | Measure-Object Value -Sum).Sum })
-        $stats = $sums | Measure-Object -Average -Maximum
-        $byType[$_.Name] = [pscustomobject]@{ MeanPercent = [math]::Round($stats.Average, 3); MaxPercent = [math]::Round($stats.Maximum, 3); Samples = $sums.Count }
-    }
-
-    return [pscustomobject]@{ ByType = $byType; Error = $null }
 }
 
 function Measure-PresentMon([string] $Csv) {
@@ -387,6 +434,7 @@ function Invoke-Run($Run, [int] $Index) {
     $condition = $Run.Condition
     $tag = '{0:D2}-{1}-{2}' -f $Index, $condition.Name, $Run.Pass
     $engineProcess = $null
+    $monitorProcess = $null
     $sampler = $null
     $pm = $null
     try {
@@ -424,14 +472,35 @@ function Invoke-Run($Run, [int] $Index) {
                 throw "[$tag] the engine exited early with code $($engineProcess.ExitCode): $("$err".Trim())"
             }
 
+            # Spike 11.1: the Monitor Recording's engine, beside the capture, ending with it.
+            if ($condition.MonitorOptions) {
+                $monitorArgs = @('debug-capture') + $condition.MonitorOptions + @(
+                    '--seconds', [string] ($Run.Seconds + $EngineTailSeconds),
+                    '--output', (Join-Path $OutDir "$tag-monitors.mp4"), '--stats', (Join-Path $OutDir "$tag-monitors.json"))
+                if ($OutputDevice) { $monitorArgs += @('--output-device', $OutputDevice) }
+                if ($InputDevice) { $monitorArgs += @('--input-device', $InputDevice) }
+                if ($Fps -gt 0) { $monitorArgs += @('--fps', [string] $Fps) }
+                Write-Host "[$tag] monitor engine $($monitorArgs -join ' ')"
+                $monitorProcess = Start-Process -FilePath $Engine -ArgumentList (Format-Arguments $monitorArgs) `
+                    -RedirectStandardOutput (Join-Path $OutDir "$tag-monitors.out.log") -RedirectStandardError (Join-Path $OutDir "$tag-monitors.err.log") `
+                    -NoNewWindow -PassThru
+                $null = $monitorProcess.Handle
+                Start-Sleep -Seconds 3
+                if ($monitorProcess.HasExited) {
+                    $err = Get-Content (Join-Path $OutDir "$tag-monitors.err.log") -Raw -ErrorAction SilentlyContinue
+                    throw "[$tag] the monitor engine exited early with code $($monitorProcess.ExitCode): $("$err".Trim())"
+                }
+            }
+
             if (-not $NoGpuSampler) {
-                $sampler = Start-GpuSampler -EnginePid $engineProcess.Id -Samples $Run.Seconds
+                $pids = @($engineProcess.Id) + @(if ($monitorProcess) { $monitorProcess.Id })
+                $sampler = Start-GpuSampler -EnginePid $pids -Samples $Run.Seconds
             }
         }
 
         Write-Host "[$tag] PresentMon $($Run.Seconds) s on $($process.ProcessName).exe ..."
         $pmArgs = @('--process_name', "$($process.ProcessName).exe", '--output_file', $csv, '--timed', [string] $Run.Seconds,
-            '--terminate_after_timed', '--no_console_stats', '--stop_existing_session', '--session_name', "ReplayBuffer-PathA-$PID")
+            '--terminate_after_timed', '--no_console_stats', '--stop_existing_session', '--session_name', "Encore-PathA-$PID")
         $pm = Start-Process -FilePath $PresentMon -ArgumentList (Format-Arguments $pmArgs) -NoNewWindow -PassThru `
             -RedirectStandardOutput (Join-Path $OutDir "$tag-presentmon.out.log") -RedirectStandardError (Join-Path $OutDir "$tag-presentmon.err.log")
         $null = $pm.Handle
@@ -458,15 +527,26 @@ function Invoke-Run($Run, [int] $Index) {
             $engineExit = $engineProcess.ExitCode
         }
 
+        $monitorExit = $null
+        if ($monitorProcess) {
+            if (-not $monitorProcess.WaitForExit(($EngineTailSeconds + 60) * 1000)) {
+                $monitorProcess.Kill()
+                Write-Warning "[$tag] the monitor engine did not stop on its own and was killed."
+            }
+
+            $monitorExit = $monitorProcess.ExitCode
+        }
+
         $stats = if ($condition.Capture -and (Test-Path $statsPath)) { Get-Content $statsPath -Raw | ConvertFrom-Json } else { $null }
         return [pscustomobject]@{
             Tag = $tag; Condition = $condition.Name; Pass = $Run.Pass; Seconds = $Run.Seconds
-            Fps = Measure-PresentMon $csv; Gpu = $gpu; Stats = $stats; EngineExit = $engineExit
+            Fps = Measure-PresentMon $csv; Gpu = $gpu; Stats = $stats; EngineExit = $engineExit; MonitorExit = $monitorExit
         }
     }
     catch {
         # Leave nothing running: a later run, or the builder, must not find a stray engine.
         if ($engineProcess -and -not $engineProcess.HasExited) { $engineProcess.Kill() }
+        if ($monitorProcess -and -not $monitorProcess.HasExited) { $monitorProcess.Kill() }
         if ($pm -and -not $pm.HasExited) { $pm.Kill() }
         if ($sampler) { Remove-Job -Job $sampler -Force -ErrorAction SilentlyContinue }
         Stop-OwnSession
@@ -478,14 +558,14 @@ function Invoke-Run($Run, [int] $Index) {
 
 # Keep the PC awake and the display on for the whole session: an idle timeout that sleeps,
 # blanks or locks the PC stops the game presenting. ES_CONTINUOUS holds until it is reset.
-Add-Type -Namespace ReplayBuffer -Name Power -MemberDefinition @'
+Add-Type -Namespace Encore -Name Power -MemberDefinition @'
 [System.Runtime.InteropServices.DllImport("kernel32.dll")]
 public static extern uint SetThreadExecutionState(uint esFlags);
 '@
 $EsContinuous = [uint32] 2147483648 # 0x80000000; a bare hex literal is a negative Int32
 $EsSystemRequired = [uint32] 1
 $EsDisplayRequired = [uint32] 2
-if ([ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous -bor $EsSystemRequired -bor $EsDisplayRequired) -eq 0) {
+if ([Encore.Power]::SetThreadExecutionState($EsContinuous -bor $EsSystemRequired -bor $EsDisplayRequired) -eq 0) {
     Write-Warning 'Could not keep the PC awake; set sleep and screen lock to Never for this session.'
 }
 
@@ -519,7 +599,7 @@ try {
     }
 }
 finally {
-    [void] [ReplayBuffer.Power]::SetThreadExecutionState($EsContinuous)
+    [void] [Encore.Power]::SetThreadExecutionState($EsContinuous)
     Stop-OwnSession
 }
 
@@ -631,7 +711,7 @@ $summary = [ordered]@{
         'fpsLossPercent is against the mean of the baseline runs in this invocation.'
         'Engine CPU, allocations and GC rates exclude the engine''s first 10 s (warm-up); frame counts include them.'
         'Missed slots are against 60 fps; judge them against the game''s own present rate (avgFps).'
-        'GPU engine use is the engine process only, summed over engines of a type per 1 s sample (Get-Counter "\GPU Engine(pid_<engine>_*)\Utilization Percentage").'
+        'GPU engine use is the engine processes only (game engine, plus the monitor engine in -mon conditions): per 1 s sample, the maximum over each process''s engines of a type, summed over processes (a process gets three identical video-encode instances; before 2026-11-04 they were summed too, 3x too high) (Get-Counter "\GPU Engine(pid_<engine>_*)\Utilization Percentage").'
         'NativeAOT: see engine.nativeAot and engine.sizeBytes; startupToFirstFrameMs is process start to the first captured frame.'
         'Interop debugging effort is qualitative and not measured here.'
     )

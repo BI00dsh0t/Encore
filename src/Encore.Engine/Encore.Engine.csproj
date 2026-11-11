@@ -1,0 +1,28 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <CopyFFmpegNative>true</CopyFFmpegNative>
+    <!-- The engine ships NativeAOT, which tools/publish-engine.ps1 publishes. -->
+    <PublishAot>true</PublishAot>
+    <!-- The App's icon, so Task Manager shows the brand for the background service too. -->
+    <ApplicationIcon>..\Encore.App\Icons\encore.ico</ApplicationIcon>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Microsoft.Extensions.Logging" />
+    <Compile Include="..\Shared\ClipPeakFile.cs" Link="ClipPeakFile.cs" />
+  </ItemGroup>
+  <ItemGroup>
+    <InternalsVisibleTo Include="Encore.Engine.Tests" />
+    <!-- The Overlay end-to-end test hosts the engine in-process beside the App's Overlay. -->
+    <InternalsVisibleTo Include="Encore.App.Tests" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\Encore.Contracts\Encore.Contracts.csproj" />
+    <ProjectReference Include="..\Encore.Core\Encore.Core.csproj" />
+    <ProjectReference Include="..\Encore.Media\Encore.Media.csproj" />
+    <ProjectReference Include="..\Encore.Platform.Capture\Encore.Platform.Capture.csproj" />
+    <ProjectReference Include="..\Encore.Platform.Audio\Encore.Platform.Audio.csproj" />
+    <ProjectReference Include="..\Encore.Platform.FFmpeg\Encore.Platform.FFmpeg.csproj" />
+    <ProjectReference Include="..\Encore.Platform.Windows\Encore.Platform.Windows.csproj" />
+  </ItemGroup>
+</Project>

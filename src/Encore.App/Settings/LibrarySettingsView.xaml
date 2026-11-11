@@ -1,0 +1,57 @@
+<UserControl x:Class="Encore.App.Settings.LibrarySettingsView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:settings="clr-namespace:Encore.App.Settings"
+             xmlns:theme="clr-namespace:Encore.App.Theme">
+    <UserControl.Resources>
+        <BooleanToVisibilityConverter x:Key="Visible" />
+        <theme:EmptyToCollapsedConverter x:Key="Collapsed" />
+    </UserControl.Resources>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+            <HeaderedContentControl Header="Clips folder" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <settings:FolderPickerView x:Name="ClipsFolderPicker" DataContext="{Binding ClipsFolder}" />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}" Text="{Binding FolderSizeText}" />
+                </StackPanel>
+            </HeaderedContentControl>
+
+            <HeaderedContentControl Header="Cleanup" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                                  Margin="0,0,12,0"
+                                  VerticalAlignment="Center"
+                                  Content="Keep the folder under (GB)"
+                                  IsChecked="{Binding SizeLimitEnabled}" />
+                        <TextBox Grid.Column="1" Margin="0,4" Text="{Binding SizeLimitText}" />
+                        <CheckBox Grid.Row="1"
+                                  FontSize="{DynamicResource BodyTextBlockFontSize}"
+                                  Margin="0,0,12,0"
+                                  VerticalAlignment="Center"
+                                  Content="Delete files older than (days)"
+                                  IsChecked="{Binding AgeLimitEnabled}" />
+                        <TextBox Grid.Row="1" Grid.Column="1" Margin="0,4" Text="{Binding AgeLimitText}" />
+                    </Grid>
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="Cleanup deletes the oldest files permanently, not to the Recycle Bin." />
+                    <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                               Text="Cleanup never deletes a Favourite or a file being written." />
+                    <TextBlock Margin="0,8,0,0"
+                               Style="{DynamicResource EncoreSettingsErrorTextStyle}"
+                               Text="{Binding CleanupBlockedText}"
+                               Visibility="{Binding CleanupBlockedText, Converter={StaticResource Collapsed}}" />
+                </StackPanel>
+            </HeaderedContentControl>
+        </theme:SettingsContent>
+    </ScrollViewer>
+</UserControl>

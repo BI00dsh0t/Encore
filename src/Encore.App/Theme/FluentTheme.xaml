@@ -1,0 +1,53 @@
+<!-- Fluent's side of the token set: only the App keys Fluent has no key for; they follow Windows live. -->
+<ResourceDictionary x:Class="Encore.App.Theme.FluentTheme"
+                    x:ClassModifier="internal"
+                    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <SolidColorBrush x:Key="EncoreAccentSubtleBrush" Color="{DynamicResource SubtleFillColorSecondary}" />
+    <!-- The selected Library row: the accent's light tint at a quarter, so even a grey accent reads stronger. -->
+    <SolidColorBrush x:Key="EncoreLibraryRowSelectedBrush"
+                     Opacity="0.25"
+                     Color="{DynamicResource {x:Static SystemColors.AccentColorLight2Key}}" />
+    <SolidColorBrush x:Key="EncoreRecordBrush" Color="{DynamicResource SystemFillColorCritical}" />
+    <SolidColorBrush x:Key="EncoreOverlayCardBrush" Opacity="0.9" Color="{DynamicResource SolidBackgroundFillColorQuarternary}" />
+    <!-- The brand's mint, not the accent: the mark is a logo, so it keeps its colour whatever the Windows accent. -->
+    <SolidColorBrush x:Key="EncoreBrandMintBrush" Color="#2DD4BF" />
+
+    <!-- The Encore mark on its 256 px canvas: the master's ring outlined, its round tail and arrowhead, turned 45° left. -->
+    <PathGeometry x:Key="EncoreMarkGeometry"
+                  Figures="M 128,32 A 96,96 0 1 1 44.8616,80 A 14,14 0 0 1 69.1103,94 A 68,68 0 1 0 128,60 Z M 90,46 L 128,22 L 128,70 Z">
+        <PathGeometry.Transform>
+            <RotateTransform Angle="-45" CenterX="128" CenterY="128" />
+        </PathGeometry.Transform>
+    </PathGeometry>
+
+    <CornerRadius x:Key="EncoreSmallCornerRadius">4</CornerRadius>
+    <CornerRadius x:Key="EncoreNavItemCornerRadius">4</CornerRadius>
+
+    <!-- The App's type styles. ContentControls, so Gaming dark's versions can uppercase in their template. -->
+    <Style x:Key="EncoreTextStyleBase" TargetType="ContentControl">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <TextBlock Text="{TemplateBinding Content}" TextTrimming="CharacterEllipsis" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+    <Style x:Key="EncoreSectionHeaderStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
+        <Setter Property="FontSize" Value="{DynamicResource BodyTextBlockFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="EncorePageTitleStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
+        <Setter Property="FontSize" Value="{DynamicResource TitleTextBlockFontSize}" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+    <Style x:Key="EncoreBrandStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
+        <Setter Property="FontSize" Value="15" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+</ResourceDictionary>

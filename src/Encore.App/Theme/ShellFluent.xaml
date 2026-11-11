@@ -1,0 +1,38 @@
+<!-- The shell under Fluent: only what differs from ShellShared.xaml. The nav pane shows Mica; the content sits on a layer. -->
+<ResourceDictionary x:Class="Encore.App.Theme.ShellFluent"
+                    x:ClassModifier="internal"
+                    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:theme="clr-namespace:Encore.App.Theme">
+    <ResourceDictionary.MergedDictionaries>
+        <theme:ShellShared />
+    </ResourceDictionary.MergedDictionaries>
+
+    <!-- The nav pane sits on Mica (or bg-base where there is none), with a gutter round the items. -->
+    <Thickness x:Key="EncoreNavPanePadding">4,0,4,8</Thickness>
+    <Thickness x:Key="EncoreNavBrandMargin">12,16,12,16</Thickness>
+
+    <!-- The nav pane shows Mica straight through; the content layer's edge marks the boundary. -->
+    <Style x:Key="EncoreShellNavLayerStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource SubtleFillColorTransparentBrush}" />
+    </Style>
+
+    <!-- The content column's layer: bg-layer over Mica; stroke-card is black and vanished beside the nav pane in dark mode. -->
+    <Style x:Key="EncoreShellContentLayerStyle" TargetType="Border">
+        <Setter Property="Background" Value="{DynamicResource LayerFillColorDefaultBrush}" />
+        <Setter Property="BorderBrush" Value="{DynamicResource DividerStrokeColorDefaultBrush}" />
+        <Setter Property="SnapsToDevicePixels" Value="True" />
+        <Setter Property="BorderThickness" Value="1,1,0,0" />
+        <Setter Property="CornerRadius" Value="8,0,0,0" />
+    </Style>
+
+    <!-- Nav item text: text-primary, and text-secondary while pressed. -->
+    <Style x:Key="EncoreNavItemStyle" TargetType="ListBoxItem" BasedOn="{StaticResource EncoreNavItemBaseStyle}">
+        <Setter Property="Foreground" Value="{DynamicResource TextFillColorPrimaryBrush}" />
+        <Style.Triggers>
+            <Trigger Property="theme:NavPress.IsPressed" Value="True">
+                <Setter Property="Foreground" Value="{DynamicResource TextFillColorSecondaryBrush}" />
+            </Trigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>

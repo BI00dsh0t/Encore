@@ -1,0 +1,153 @@
+using System.Windows;
+using Encore.App.Engine;
+using Encore.Contracts;
+using Encore.Contracts.Messages;
+using Encore.Contracts.Settings;
+
+namespace Encore.App.Settings;
+
+/// <summary>The Feedback Sounds page: a switch and a Play button per sound, and the sound device. UI thread.</summary>
+internal sealed class FeedbackSoundsViewModel : SettingsViewModel
+{
+    private const string DefaultDeviceLabel = "Default communications device";
+
+    private readonly IEngineSession _engine;
+    private FeedbackSounds _sounds = Keys.FeedbackSounds.Default;
+    private string? _device = Keys.FeedbackSoundDevice.Default;
+    private AudioDeviceList _devices = AudioDeviceList.Empty;
+    private IReadOnlyList<FeedbackDeviceItem> _deviceItems = [new(null, DefaultDeviceLabel)];
+    private string? _capturedWarning;
+
+    public FeedbackSoundsViewModel(SettingsSender sender, IEngineSession engine)
+        : base(sender)
+    {
+        _engine = engine;
+        Sounds =
+        [
+            new(this, FeedbackSound.ClipSaved, "Clip saved"),
+            new(this, FeedbackSound.SaveFailed, "Save failed"),
+            new(this, FeedbackSound.RecordingStarted, "Recording started"),
+            new(this, FeedbackSound.RecordingStopped, "Recording stopped"),
+            new(this, FeedbackSound.DiskFull, "Disk full"),
+        ];
+    }
+
+    public override string Title => "Sounds";
+
+    /// <summary>One row per sound, in the page's order.</summary>
+    public IReadOnlyList<FeedbackSoundRow> Sounds { get; }
+
+    /// <summary>The default device first, then the available Output Devices, then the set device if it isn't listed.</summary>
+    public IReadOnlyList<FeedbackDeviceItem> Devices
+    {
+        get => _deviceItems;
+        private set => Set(ref _deviceItems, value);
+    }
+
+    public FeedbackDeviceItem? SelectedDevice
+    {
+        get => _deviceItems.FirstOrDefault(device => SameEndpoint(device.EndpointId, _device));
+        set
+        {
+            // A combo box whose list changed clears its selection; that isn't a choice.
+            if (value is null || SameEndpoint(value.EndpointId, _device))
+            {
+                return;
+            }
+
+            _device = value.EndpointId;
+            OnPropertyChanged();
+            _ = SendAsync([SettingsValues.SetGlobal(Keys.FeedbackSoundDevice, value.EndpointId)]);
+        }
+    }
+
+    /// <summary>The active <c>feedback-device-captured</c> warning's message, or null.</summary>
+    public string? CapturedWarning
+    {
+        get => _capturedWarning;
+        private set => Set(ref _capturedWarning, value);
+    }
+
+    /// <summary>Takes the snapshot's devices and warnings. Called before <see cref="SettingsViewModel.Render"/>.</summary>
+    public void ShowState(StateSnapshot state)
+    {
+        ArgumentNullException.ThrowIfNull(state);
+        // A session that isn't connected has no active warnings, as on the status line.
+        var warnings = EngineSessions.ConnectedState(_engine.Status, state)?.Warnings;
+        CapturedWarning = warnings?.FirstOrDefault(warning => warning.Code == ErrorCodes.FeedbackDeviceCaptured)?.Message;
+        if (!Equals(_devices, state.Devices))
+        {
+            _devices = state.Devices;
+            ShowDevices();
+        }
+    }
+
+    internal bool IsOn(FeedbackSound sound) => _sounds.IsOn(sound);
+
+    internal void Switch(FeedbackSoundRow row, bool value)
+    {
+        if (IsOn(row.Sound) == value)
+        {
+            return;
+        }
+
+        _sounds = _sounds.With(row.Sound, value);
+        row.Changed();
+        _ = SendAsync([SettingsValues.SetGlobal(Keys.FeedbackSounds, _sounds)]);
+    }
+
+    internal async Task PlayAsync(FeedbackSound sound)
+    {
+        try
+        {
+            await _engine.SendAsync(FeedbackMessages.Preview, new FeedbackPreview(sound));
+            Message = null;
+        }
+        catch (ErrorCodeException e)
+        {
+            Message = $"Couldn't play ({e.Code}): {e.Message}";
+        }
+    }
+
+    protected override FrameworkElement CreateView() => new FeedbackSoundsView { DataContext = this };
+
+    protected override void OnRender(SettingsDocument document)
+    {
+        _sounds = SettingsValues.Global(document, Keys.FeedbackSounds);
+        _device = SettingsValues.Global(document, Keys.FeedbackSoundDevice);
+        foreach (var row in Sounds)
+        {
+            row.Changed();
+        }
+
+        ShowDevices();
+    }
+
+    private static bool SameEndpoint(string? a, string? b) => string.Equals(a, b, StringComparison.OrdinalIgnoreCase);
+
+    private void ShowDevices()
+    {
+        var outputs = _devices.Devices.Where(device => device.Flow == AudioFlow.Output && device.Available).ToList();
+        bool Shared(string name) =>
+            outputs.Count(device => string.Equals(device.FriendlyName, name, StringComparison.OrdinalIgnoreCase)) > 1;
+        string Label(AudioDevice device) => Shared(device.FriendlyName) && device.ParentName.Length > 0
+            ? $"{device.FriendlyName} — {device.ParentName}"
+            : device.FriendlyName;
+
+        List<FeedbackDeviceItem> items = [new(null, DefaultDeviceLabel)];
+        items.AddRange(outputs.Select(device => new FeedbackDeviceItem(device.EndpointId, Label(device))));
+        if (_device is { } id && !items.Any(item => SameEndpoint(item.EndpointId, id)))
+        {
+            var known = _devices.Devices.FirstOrDefault(device => SameEndpoint(device.EndpointId, id));
+            items.Add(new(id, (known?.FriendlyName is { Length: > 0 } name ? name : id) + " (not connected)"));
+        }
+
+        // The selection follows the list, so a combo box that cleared its selection gets it back.
+        if (!items.SequenceEqual(_deviceItems))
+        {
+            Devices = items;
+        }
+
+        OnPropertyChanged(nameof(SelectedDevice));
+    }
+}

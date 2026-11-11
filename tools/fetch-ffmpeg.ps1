@@ -35,20 +35,43 @@ $Required = @(
     'avutil-61.dll',
     'swresample-7.dll',
     'swscale-10.dll',
+    'ffmpeg.exe',
     'ffprobe.exe'
 )
+
+# Each required file's SHA-256, from the archive above, so a copy that came from anywhere but that
+# archive (a cache, an old folder) is caught. Update these with $Sha256 when the build changes.
+$FileSha256 = @{
+    'avcodec-63.dll'   = '81ceccb166cb55f9a7a9520021a0f5d1dc3a0fa29923806a2e77e49609b28af2'
+    'avdevice-63.dll'  = 'cb986ce64ce5df7259f3230905ec1f1d18f490896c47f98f2517f8e1ab9f271d'
+    'avfilter-12.dll'  = '3e781d3f9c25441588a243f933ec259f5d22d4fa2f3bd654f5eee5115fbd4b9c'
+    'avformat-63.dll'  = '728f3d39b2a6817e6df79f55509c806c1652d86c4fb1c5af5da4e8a44f56b3f2'
+    'avutil-61.dll'    = 'c8e86e863d2c1b686e39d98e37e92ee68f00ab1108507087cbd4d360b9997945'
+    'swresample-7.dll' = 'aa2084d3d789e0ceba536caec7cfb7d15bc00d237d2ebe5b6101f9be7270429d'
+    'swscale-10.dll'   = '86c97ae5abbff3b72f6c58528a35d0f2ce553d4fd405167847ac76c8716cce4e'
+    'ffmpeg.exe'       = '972c36ee5e1716c5b6610723e6a53f31b1cb51a09b48543c8885771de04975ab'
+    'ffprobe.exe'      = '54926acffbdfce401d77cabab9013c7b05aa67050708eeef153d450735884f49'
+}
 
 $RepoRoot = Split-Path -Parent $PSScriptRoot
 $Target = Join-Path $RepoRoot 'native/ffmpeg'
 $Stamp = Join-Path $Target '.sha256'
 
+# The names of required files in $Folder that are missing or don't match their pinned SHA-256.
+function Get-BadFiles([string] $Folder) {
+    foreach ($name in $Required) {
+        $path = Join-Path $Folder $name
+        $isPresent = Test-Path -LiteralPath $path
+        if (-not $isPresent -or (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash.ToLowerInvariant() -ne $FileSha256[$name]) {
+            $name
+        }
+    }
+}
+
 function Test-Complete {
     if (-not (Test-Path -LiteralPath $Stamp)) { return $false }
     if ((Get-Content -LiteralPath $Stamp -Raw).Trim() -ne $Sha256) { return $false }
-    foreach ($name in $Required) {
-        if (-not (Test-Path -LiteralPath (Join-Path $Target $name))) { return $false }
-    }
-    return $true
+    return @(Get-BadFiles $Target).Count -eq 0
 }
 
 if (-not $Force -and (Test-Complete)) {
@@ -80,11 +103,10 @@ try {
     $Extracted = Join-Path $Work 'x'
     Expand-Archive -LiteralPath $Zip -DestinationPath $Extracted
     $Bin = Join-Path $Extracted "$Asset/bin"
-    foreach ($name in $Required) {
-        if (-not (Test-Path -LiteralPath (Join-Path $Bin $name))) {
-            Write-Error "$Asset.zip has no bin/$name, which the FFmpeg.AutoGen bindings need." -ErrorAction Continue
-            exit 1
-        }
+    $bad = @(Get-BadFiles $Bin)
+    if ($bad.Count -gt 0) {
+        Write-Error "$Asset.zip's bin/ has missing or unpinned files: $($bad -join ', '). Update `$FileSha256 with `$Sha256." -ErrorAction Continue
+        exit 1
     }
 
     if (Test-Path -LiteralPath $Target) { Remove-Item -LiteralPath $Target -Recurse -Force }

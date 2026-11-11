@@ -1,0 +1,20 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <UseWPF>true</UseWPF>
+    <!-- For System.Drawing's screen copy in the Overlay's capture test; its namespaces aren't imported globally. -->
+    <UseWindowsForms>true</UseWindowsForms>
+  </PropertyGroup>
+  <ItemGroup>
+    <Using Remove="System.Windows.Forms" />
+    <Using Remove="System.Drawing" />
+  </ItemGroup>
+  <!-- The test host shows the App's windows, so it needs the App's switch that keeps Mica off every window. -->
+  <ItemGroup>
+    <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\Encore.App\Encore.App.csproj" />
+    <!-- For its executable: the tests launch the built engine, as the App does. -->
+    <ProjectReference Include="..\..\src\Encore.Engine\Encore.Engine.csproj" />
+  </ItemGroup>
+</Project>

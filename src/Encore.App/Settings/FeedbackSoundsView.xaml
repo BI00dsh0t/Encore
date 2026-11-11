@@ -1,0 +1,50 @@
+<UserControl x:Class="Encore.App.Settings.FeedbackSoundsView"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:theme="clr-namespace:Encore.App.Theme">
+    <UserControl.Resources>
+        <theme:EmptyToCollapsedConverter x:Key="Collapsed" />
+    </UserControl.Resources>
+    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <theme:SettingsContent Style="{DynamicResource EncoreSettingsContentStyle}">
+            <HeaderedContentControl Header="Sounds" Style="{DynamicResource EncoreSettingsSectionStyle}">
+                <StackPanel>
+                    <TextBlock Margin="0,0,0,8"
+                               Style="{DynamicResource EncoreSettingsErrorTextStyle}"
+                               Text="{Binding CapturedWarning}"
+                               Visibility="{Binding CapturedWarning, Converter={StaticResource Collapsed}}" />
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" SharedSizeGroup="Label" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="Sound device" />
+                        <ComboBox Grid.Column="1"
+                                  Margin="0,4"
+                                  DisplayMemberPath="Label"
+                                  ItemsSource="{Binding Devices}"
+                                  SelectedItem="{Binding SelectedDevice}" />
+                    </Grid>
+                    <ItemsControl Margin="0,8,0,0" ItemsSource="{Binding Sounds}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <DockPanel Margin="0,4">
+                                    <Button MinWidth="60"
+                                            Margin="12,0,0,0"
+                                            Command="{Binding PlayCommand}"
+                                            Content="Play"
+                                            DockPanel.Dock="Right" />
+                                    <CheckBox FontSize="{DynamicResource BodyTextBlockFontSize}"
+                                              VerticalAlignment="Center"
+                                              Content="{Binding Label}"
+                                              IsChecked="{Binding IsOn}" />
+                                </DockPanel>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </HeaderedContentControl>
+        </theme:SettingsContent>
+    </ScrollViewer>
+</UserControl>

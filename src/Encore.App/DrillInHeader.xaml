@@ -1,0 +1,25 @@
+<UserControl x:Class="Encore.App.DrillInHeader"
+             x:ClassModifier="internal"
+             xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             AutomationProperties.Name="Breadcrumb">
+    <!-- The breadcrumb header: Back, the parent's title as a link, ›, the item's name. -->
+    <StackPanel Orientation="Horizontal">
+        <Button x:Name="BackButton"
+                Margin="0,0,12,0"
+                Padding="8,4"
+                VerticalAlignment="Center"
+                AutomationProperties.Name="{Binding BackName}"
+                Command="{Binding BackCommand}"
+                ToolTip="Back (Esc)">
+            <TextBlock FontFamily="{DynamicResource EncoreGamesGlyphFont}" FontSize="16" Text="&#xE72B;" />
+        </Button>
+        <TextBlock VerticalAlignment="Center" FontSize="20">
+            <Hyperlink Command="{Binding BackCommand}" Style="{DynamicResource EncoreGamesLinkStyle}">
+                <Run Text="{Binding ParentTitle, Mode=OneWay}" />
+            </Hyperlink>
+        </TextBlock>
+        <TextBlock Margin="12,0" VerticalAlignment="Center" Style="{DynamicResource EncoreGamesChevronStyle}" />
+        <ContentControl VerticalAlignment="Center" Content="{Binding ItemTitle}" Style="{DynamicResource EncorePageTitleStyle}" />
+    </StackPanel>
+</UserControl>
