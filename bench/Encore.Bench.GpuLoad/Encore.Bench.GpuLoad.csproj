@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- Story 1.14: Bench's synthetic GPU-bound load, a borderless popup like a borderless game. -->
+    <!-- Bench's synthetic GPU-bound load, a borderless popup like a borderless game. -->
     <OutputType>WinExe</OutputType>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <CsWin32RunAsBuildTask>true</CsWin32RunAsBuildTask>

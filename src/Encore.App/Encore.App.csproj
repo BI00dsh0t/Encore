@@ -7,20 +7,14 @@
   <ItemGroup>
     <PackageReference Include="H.NotifyIcon.Wpf" />
   </ItemGroup>
-  <!--
-    WPF's Fluent theme puts Mica behind every window unless this switch is on, and caches the switch the
-    first time any window shows, so it is set in the runtimeconfig, from process start (AD-23; ThemeService).
-  -->
+  <!-- WPF caches this switch when the first window shows, so it is set at process start to keep Mica off every window. -->
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Encore.App.Tests" />
   </ItemGroup>
-  <!--
-    Core's canvas rule, shared with the Hotkeys screen picker (AD-25, story 11.4). It's a pure function on
-    Contracts types, compiled here as a linked source file, because AD-2's graph has no App to Core edge.
-  -->
+  <!-- Core's canvas rule is linked as source, because the App must not reference Core. -->
   <ItemGroup>
     <Compile Include="..\Encore.Core\Monitors\MonitorCanvasRule.cs" Link="Settings\MonitorCanvasRule.cs" />
     <Compile Include="..\Shared\ClipPeakFile.cs" Link="Library\ClipPeakFile.cs" />
@@ -28,7 +22,7 @@
   <ItemGroup>
     <ProjectReference Include="..\Encore.Contracts\Encore.Contracts.csproj" />
     <ProjectReference Include="..\Encore.Platform.Desktop\Encore.Platform.Desktop.csproj" />
-    <!-- Build order only: the App never compiles against the engine (AD-2). -->
+    <!-- Build order only: the App never compiles against the engine. -->
     <ProjectReference Include="..\Encore.Engine\Encore.Engine.csproj" ReferenceOutputAssembly="false" />
   </ItemGroup>
 

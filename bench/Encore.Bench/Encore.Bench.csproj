@@ -16,7 +16,7 @@
     <ProjectReference Include="..\..\src\Encore.Contracts\Encore.Contracts.csproj" />
     <ProjectReference Include="..\..\src\Encore.Media\Encore.Media.csproj" />
     <ProjectReference Include="..\..\src\Encore.Platform.Audio\Encore.Platform.Audio.csproj" />
-    <!-- Monitors.OverlayPlanes: whether the load's monitor has hardware overlay planes (story 5.12). Not the App (AD-2). -->
+    <!-- Bench reads whether the load's monitor has hardware overlay planes from Monitors.OverlayPlanes, not from the App. -->
     <ProjectReference Include="..\..\src\Encore.Platform.Desktop\Encore.Platform.Desktop.csproj" />
     <!-- Built first, not referenced: bench fps starts its exe from its own output folder. -->
     <ProjectReference Include="..\Encore.Bench.GpuLoad\Encore.Bench.GpuLoad.csproj" ReferenceOutputAssembly="false" />

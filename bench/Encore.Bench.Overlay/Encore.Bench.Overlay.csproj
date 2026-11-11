@@ -1,6 +1,6 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
-    <!-- Story 5.2: the App's Overlay window, hosted on its own so bench overlay can show it over the GPU load. -->
+    <!-- The App's Overlay window, hosted on its own so bench overlay can show it over the GPU load. -->
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <!-- Per-monitor DPI aware, as the App is, so the dot is placed in physical pixels. -->
