@@ -9,6 +9,7 @@ using Encore.Contracts.Messages;
 using Encore.Contracts.Settings;
 using Encore.Engine.Supervision;
 using Encore.Platform.Windows;
+using Encore.Platform.Windows.Stores;
 
 namespace Encore.Engine.Tests;
 
@@ -21,6 +22,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
 
     private readonly string _folder = Path.Combine(Path.GetTempPath(), "rb-games-" + Guid.NewGuid().ToString("N"));
     private readonly FakeProbe _probe = new();
+    private readonly List<StoreFolder> _stores = [];
     private EngineHost _host = null!;
     private EngineClient _client = null!;
     private Channel<IpcEvent> _events = null!;
@@ -43,6 +45,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
                 ProbeEncoders = false,
                 AppLauncher = new StayingLauncher(),
                 GameWindows = _probe,
+                GameStores = () => _stores,
                 GameScanInterval = TimeSpan.FromMilliseconds(50),
             });
         _events = Channel.CreateUnbounded<IpcEvent>();
@@ -96,7 +99,7 @@ public sealed class GameDetectionServeTests : IAsyncLifetime
         Assert.Equal(2, _client.State!.Settings.Revision);
         var detected = GameMessages.Detected.Read((await NextAsync("game.detected")).Payload);
         var changed = GameMessages.TargetChanged.Read((await NextAsync("target.changed")).Payload);
-        var expected = new DetectedGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid);
+        var expected = new DetectedGame(GamePaths.Canonicalize(GamePath), "Game.EXE", GamePid, GameSources.Manual);
         Assert.Equal(expected, detected);
         Assert.Equal(new TargetChanged(null, new TargetGame(expected.ProfileId, expected.Name, GamePid), TargetChangeReason.Detected), changed);
         Assert.Equal([expected], _client.State!.DetectedGames!);

@@ -6,6 +6,7 @@ using Encore.Core.Sessions;
 using Encore.Engine.Supervision;
 using Encore.Platform.Audio;
 using Encore.Platform.Windows;
+using Encore.Platform.Windows.Stores;
 
 namespace Encore.Engine;
 
@@ -32,6 +33,9 @@ internal sealed record EngineHostOptions
 
     /// <summary>Game Detection's window probe; null is the real one. Injecting one turns detection on for a test instance.</summary>
     public IGameWindowProbe? GameWindows { get; init; }
+
+    /// <summary>The stores' game folders for Game Detection; null reads Steam, the Xbox app, Epic, GOG and Ubisoft Connect.</summary>
+    public Func<IReadOnlyList<StoreFolder>>? GameStores { get; init; }
 
     /// <summary><c>serve --debug-capture</c>: a capture session follows the Target Game.</summary>
     public bool DebugCapture { get; init; }

@@ -114,7 +114,10 @@ public static class ProfileAttributes
     public const string Ignored = "ignored";
     public const string RecordingsEnabled = "recordingsEnabled";
 
-    public static IReadOnlyList<string> All { get; } = [Name, Ignored, RecordingsEnabled];
+    /// <summary>One of <see cref="GameSources"/>, set when the profile is created.</summary>
+    public const string Source = "source";
+
+    public static IReadOnlyList<string> All { get; } = [Name, Ignored, RecordingsEnabled, Source];
 }
 
 /// <summary>The closed settings key catalog. A key missing from the document takes its default.</summary>

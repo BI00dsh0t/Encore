@@ -132,6 +132,11 @@ internal static class SettingsOps
             throw Refuse(ErrorCodes.ProfileNotFound, index, $"no Game Profile '{op.ProfileId}'");
         }
 
+        if (op.Key == ProfileAttributes.Source)
+        {
+            return profile with { Source = SourceOf(op, index) };
+        }
+
         if (op.Value.ValueKind is not (JsonValueKind.True or JsonValueKind.False))
         {
             throw Refuse(ErrorCodes.SettingInvalidValue, index, $"'{op.Key}' must be true or false");
@@ -142,6 +147,11 @@ internal static class SettingsOps
             ? profile with { Ignored = value }
             : profile with { RecordingsEnabled = value };
     }
+
+    private static string SourceOf(SettingsOp op, int index) =>
+        op.Value.ValueKind == JsonValueKind.String && op.Value.GetString() is { } source && GameSources.All.Contains(source)
+            ? source
+            : throw Refuse(ErrorCodes.SettingInvalidValue, index, "'source' must be one of the game sources");
 
     private static SettingKey KeyFor(SettingsOp op, int index) =>
         Keys.TryGet(op.Key, out var key)

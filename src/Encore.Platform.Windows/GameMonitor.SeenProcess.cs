@@ -14,6 +14,9 @@ public sealed partial class GameMonitor
         /// <summary>The timestamp of the last poll that saw it in front; 0 = never.</summary>
         public long LastFocused { get; set; }
 
+        /// <summary>How it was found, one of the game sources; set when it is detected.</summary>
+        public string? Source { get; set; }
+
         /// <summary>The program's own canonical path; null when it can't be made canonical.</summary>
         public string? Path { get; init; }
 

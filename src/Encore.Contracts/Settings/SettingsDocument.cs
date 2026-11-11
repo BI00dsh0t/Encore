@@ -38,6 +38,10 @@ public sealed record GameProfile
     [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
     public string? Folder { get; init; }
 
+    /// <summary>How the game was first found, one of <see cref="GameSources"/>; null on a profile made before it was kept.</summary>
+    [JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    public string? Source { get; init; }
+
     /// <summary>Override values by key name; only overridable keys take effect.</summary>
     public ImmutableSortedDictionary<string, JsonElement> Overrides { get; init; } = SettingsMaps.EmptyValues;
 }

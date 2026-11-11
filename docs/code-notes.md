@@ -52,6 +52,10 @@ How a game is detected:
 - Excluded processes (the engine's and the attached App's) and anything under the install folder are never detected.
 - The fullscreen rule alone is weak evidence: a browser or media player showing a video passes it. So the programs in
   `NeverGames` (anything under the Windows folder, and a list of apps by file name) are only ever detected by a listing.
+- A program in a store's game folder (Steam's `steamapps\common`, the Xbox app's `.GamingRoot` folders, Epic's
+  manifests, GOG and Ubisoft Connect) is as sure a game as a listed one: it is found by the fullscreen rule, never
+  windowed, since those folders also hold launchers and tools. A never-game there stays a never-game.
+- Each detection carries its source: a store, Windows' list (or `manual`, set by the engine), or `fullscreen`.
 - A Store app's folder names its version. `profileOf` maps a new version to the Game Profile of an older one
   (`StorePackages.Key`), so a choice and a game's settings survive an update.
 - A game whose Game Profile is Ignored is never detected. One that becomes Ignored while detected is forgotten as if it

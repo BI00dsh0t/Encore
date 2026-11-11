@@ -1,4 +1,6 @@
 using Microsoft.Extensions.Logging;
+using Encore.Contracts.Settings;
+using Encore.Platform.Windows.Stores;
 using Encore.Contracts.Messages;
 using Encore.Core.Sessions;
 
@@ -59,7 +61,22 @@ public sealed partial class GameMonitor
         && IsListed(current)
         && !(_seen.TryGetValue(focused, out var other) && IsListed(other));
 
-    private bool IsListed(SeenProcess game) => IsListed(game, _listedNow);
+    // A game in a store's folder is as sure as a listed one.
+    private bool IsListed(SeenProcess game) => IsListed(game, _listedNow) || StoreOf(game) is not null;
+
+    private GameStore? StoreOf(SeenProcess game) => game.Path is { } path ? StoreLibraries.StoreOf(_storesNow, path) : null;
+
+    // How a game was found: a store's folder first, then a listing, else its window alone.
+    private string SourceOf(SeenProcess game, bool listed) => StoreOf(game) switch
+    {
+        GameStore.Steam => GameSources.Steam,
+        GameStore.Xbox => GameSources.Xbox,
+        GameStore.Epic => GameSources.Epic,
+        GameStore.Gog => GameSources.Gog,
+        GameStore.Ubisoft => GameSources.Ubisoft,
+        _ when listed => GameSources.WindowsList,
+        _ => GameSources.Fullscreen,
+    };
 
     // A listed path is the program's own path, its Game Profile's (a Store app's older version), or the raw one.
     private static bool IsListed(SeenProcess game, IReadOnlySet<string> listed) =>

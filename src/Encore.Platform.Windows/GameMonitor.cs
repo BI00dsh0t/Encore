@@ -1,6 +1,7 @@
 using Microsoft.Extensions.Logging;
 using Encore.Contracts.Messages;
 using Encore.Core.Sessions;
+using Encore.Platform.Windows.Stores;
 
 namespace Encore.Platform.Windows;
 
@@ -25,6 +26,7 @@ public sealed partial class GameMonitor : IDisposable
     private readonly TimeProvider _time;
     private readonly Func<string, bool>? _isIgnored;
     private readonly Func<string, string>? _profileOf;
+    private readonly Func<IReadOnlyList<StoreFolder>>? _stores;
     private readonly ManualResetEventSlim _stop = new();
 
     // Poll's thread only: every process classified, until it exits; the detected ones have a Candidate.
@@ -36,8 +38,9 @@ public sealed partial class GameMonitor : IDisposable
     private int? _focusProcessId;
     private long _focusSince;
 
-    // Poll's thread only: the listed games' paths this poll read.
+    // Poll's thread only: the listed games' paths and the store folders this poll read.
     private IReadOnlySet<string> _listedNow = NothingListed;
+    private IReadOnlyList<StoreFolder> _storesNow = [];
     private bool _firstPoll = true;
 
     private Thread? _thread;
@@ -45,6 +48,7 @@ public sealed partial class GameMonitor : IDisposable
 
     /// <summary>Every callback runs on the monitor's thread; listed, target and isIgnored are read on each poll.</summary>
     /// <param name="profileOf">Maps a program's canonical path to the Game Profile id it belongs to; null keeps the path.</param>
+    /// <param name="stores">The stores' game folders: a game in one is as sure as a listed one. Read on each poll.</param>
     public GameMonitor(
         IGameWindowProbe probe,
         Func<int, bool> isExcluded,
@@ -58,7 +62,8 @@ public sealed partial class GameMonitor : IDisposable
         Func<int?>? target = null,
         TimeProvider? time = null,
         Func<string, bool>? isIgnored = null,
-        Func<string, string>? profileOf = null)
+        Func<string, string>? profileOf = null,
+        Func<IReadOnlyList<StoreFolder>>? stores = null)
     {
         ArgumentNullException.ThrowIfNull(probe);
         ArgumentNullException.ThrowIfNull(isExcluded);
@@ -79,6 +84,7 @@ public sealed partial class GameMonitor : IDisposable
         _time = time ?? TimeProvider.System;
         _isIgnored = isIgnored;
         _profileOf = profileOf;
+        _stores = stores;
     }
 
     /// <summary>Starts polling on a background thread, the first poll at once.</summary>
@@ -121,6 +127,7 @@ public sealed partial class GameMonitor : IDisposable
     internal void Poll()
     {
         var now = _time.GetTimestamp();
+        _storesNow = _stores?.Invoke() ?? [];
         ForgetExited();
         ForgetIgnored();
 
@@ -132,7 +139,7 @@ public sealed partial class GameMonitor : IDisposable
                 // A known non-game passes the fullscreen rule showing a video; only a listing detects it.
                 if (!Ignored(game) && !game.NonGame)
                 {
-                    Detect(game, fullscreen.Handle);
+                    Detect(game, fullscreen.Handle, listed: false);
                 }
             }
             else
@@ -147,7 +154,8 @@ public sealed partial class GameMonitor : IDisposable
         _firstPoll = false;
     }
 
-    private static DetectedGame ToDetectedGame(TargetCandidate candidate) => new(candidate.ProfileId, candidate.Name, candidate.ProcessId);
+    private static DetectedGame ToDetectedGame(TargetCandidate candidate, string? source) =>
+        new(candidate.ProfileId, candidate.Name, candidate.ProcessId, source);
 
     // A listed game is detected even when windowed; proposing is left to Decide.
     private void ScanListed(GameWindow? foreground)
@@ -169,7 +177,7 @@ public sealed partial class GameMonitor : IDisposable
             {
                 if (IsListed(game, listed) && !Ignored(game))
                 {
-                    Detect(game, window.Handle);
+                    Detect(game, window.Handle, listed: true);
                 }
             }
             else if (foreground?.ProcessId == window.ProcessId)
@@ -262,19 +270,21 @@ public sealed partial class GameMonitor : IDisposable
         }
     }
 
-    private void Detect(SeenProcess game, nint window)
+    private void Detect(SeenProcess game, nint window, bool listed)
     {
         var candidate = game.Candidate = new TargetCandidate(game.Pid, window, game.ProfileId!, Path.GetFileName(game.Process.ImagePath));
+        game.Source = SourceOf(game, listed);
         _log.LogInformation(
-            "Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}", candidate.Name, game.Pid, window, candidate.ProfileId);
-        _detected?.Invoke(ToDetectedGame(candidate));
+            "Detected {Name} (process {Pid}, window 0x{Window:X}) at {ProfileId}, found by {Source}",
+            candidate.Name, game.Pid, window, candidate.ProfileId, game.Source);
+        _detected?.Invoke(ToDetectedGame(candidate, game.Source));
 
         // The detected callback may have just made its Game Profile Ignored: forget it now, so it isn't proposed this poll.
         if (Ignored(game))
         {
             game.Candidate = null;
             _log.LogInformation("{Name} (process {Pid}) is Ignored", candidate.Name, game.Pid);
-            _exited?.Invoke(ToDetectedGame(candidate));
+            _exited?.Invoke(ToDetectedGame(candidate, game.Source));
         }
     }
 
@@ -309,7 +319,7 @@ public sealed partial class GameMonitor : IDisposable
             }
 
             _log.LogInformation("{Name} (process {Pid}) exited", game.Name, seen.Pid);
-            _exited?.Invoke(ToDetectedGame(game));
+            _exited?.Invoke(ToDetectedGame(game, seen.Source));
             committedExited |= committed == seen.Pid;
             desiredExited |= desired == seen.Pid;
         }
@@ -338,7 +348,7 @@ public sealed partial class GameMonitor : IDisposable
 
             seen.Candidate = null;
             _log.LogInformation("{Name} (process {Pid}) is Ignored", game.Name, seen.Pid);
-            _exited?.Invoke(ToDetectedGame(game));
+            _exited?.Invoke(ToDetectedGame(game, seen.Source));
             committedIgnored |= committed == seen.Pid;
             desiredIgnored |= desired == seen.Pid;
         }
