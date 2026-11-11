@@ -48,10 +48,34 @@
                                Text="When off, a game Encore finds for the first time is added to Games as Not captured. Games you add by hand are always captured." />
                 </StackPanel>
             </HeaderedContentControl>
-            <HeaderedContentControl Header="Updates" Style="{DynamicResource EncoreSettingsSectionStyle}">
+            <HeaderedContentControl Header="About and updates" Style="{DynamicResource EncoreSettingsSectionStyle}">
                 <StackPanel>
-                    <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}" Text="{Binding Updates.VersionText, Mode=OneTime}" />
-                    <CheckBox Margin="0,8,0,0"
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="*" />
+                        </Grid.ColumnDefinitions>
+                        <Control Width="40"
+                                 Height="40"
+                                 VerticalAlignment="Top"
+                                 Style="{DynamicResource EncoreMarkStyle}" />
+                        <StackPanel Grid.Column="1" Margin="12,0,0,0">
+                            <ContentControl Content="Encore" Style="{DynamicResource EncoreBrandStyle}" />
+                            <TextBlock Style="{DynamicResource EncoreSettingsLabelStyle}"
+                                       Text="{Binding Updates.VersionText, Mode=OneTime}" />
+                            <TextBlock Style="{DynamicResource EncoreSettingsHelpTextStyle}"
+                                       Text="{Binding About.Description, Mode=OneTime}" />
+                            <TextBlock Margin="0,8,0,0" Foreground="{DynamicResource TextFillColorPrimaryBrush}" TextWrapping="Wrap">
+                                <Hyperlink Command="{Binding About.OpenGitHubCommand, Mode=OneTime}"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">GitHub</Hyperlink><Run
+                                    Text=" · " /><Hyperlink Command="{Binding About.OpenLicenseCommand, Mode=OneTime}"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">License</Hyperlink><Run
+                                    Text=" · " /><Hyperlink Command="{Binding About.OpenNoticesCommand, Mode=OneTime}"
+                                           Foreground="{DynamicResource AccentTextFillColorPrimaryBrush}">Third-party notices</Hyperlink>
+                            </TextBlock>
+                        </StackPanel>
+                    </Grid>
+                    <CheckBox Margin="0,16,0,0"
                               FontSize="{DynamicResource BodyTextBlockFontSize}"
                               Content="Check for updates automatically"
                               IsEnabled="{Binding Updates.CanUpdate, Mode=OneTime}"

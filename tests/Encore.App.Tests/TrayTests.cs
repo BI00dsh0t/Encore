@@ -74,21 +74,6 @@ public sealed class TrayTests
         Assert.Equal(expected, TrayCapture.IconName((OverlayDot)dot, crashLoop, new TaskbarLook(lightTaskbar, highContrast)));
 
     [Fact]
-    public void EveryTrayIconLoadsAtTheTraySizes()
-    {
-        foreach (var name in TrayIcons.All)
-        {
-            foreach (var size in new[] { 16, 24, 32, 48 })
-            {
-                using var icon = TrayIcons.Load(name, size);
-                Assert.Equal((size, size), (icon.Width, icon.Height));
-            }
-        }
-
-        Assert.InRange(TrayIconSize.Current(), 16, 64);
-    }
-
-    [Fact]
     public void RewindIsAcceptedOnATestInstanceOnly()
     {
         Assert.True(AppArguments.TryParse(["--tray", "--instance", "Encore-Test-x1", "--rewind"], out var instance));

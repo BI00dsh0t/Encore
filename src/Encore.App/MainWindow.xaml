@@ -68,12 +68,22 @@
                     </TextBlock>
                 </StackPanel>
             </ToggleButton>
-            <ContentControl x:Name="Brand"
-                            Margin="{DynamicResource EncoreNavBrandMargin}"
-                            Content="{Binding Title, ElementName=Shell}"
-                            DockPanel.Dock="Top"
-                            Style="{DynamicResource EncoreBrandStyle}"
-                            Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
+            <!-- The mark and the name; the rail keeps only the mark. -->
+            <StackPanel x:Name="Brand"
+                        Margin="{DynamicResource EncoreNavBrandMargin}"
+                        DockPanel.Dock="Top"
+                        Orientation="Horizontal">
+                <Control x:Name="BrandMark"
+                         Width="20"
+                         Height="20"
+                         Style="{DynamicResource EncoreMarkStyle}" />
+                <ContentControl x:Name="BrandName"
+                                Margin="8,0,0,0"
+                                VerticalAlignment="Center"
+                                Content="{Binding Title, ElementName=Shell}"
+                                Style="{DynamicResource EncoreBrandStyle}"
+                                Visibility="{Binding IsNavigationExpanded, Converter={StaticResource EncoreShellVisible}}" />
+            </StackPanel>
             <app:NavListBox x:Name="Nav"
                             Padding="0"
                             AutomationProperties.Name="Navigation"

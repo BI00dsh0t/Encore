@@ -20,6 +20,23 @@
 
     <theme:LevelPeakConverter x:Key="EncoreLevelPeak" />
 
+    <!-- The Encore mark at any size: its whole 256 px canvas scales, so the mark keeps its built-in clear space. -->
+    <Style x:Key="EncoreMarkStyle" TargetType="Control">
+        <Setter Property="Focusable" Value="False" />
+        <Setter Property="IsTabStop" Value="False" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="Control">
+                    <Viewbox>
+                        <Canvas Width="256" Height="256">
+                            <Path Data="{DynamicResource EncoreMarkGeometry}" Fill="{DynamicResource EncoreBrandMintBrush}" />
+                        </Canvas>
+                    </Viewbox>
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
+    </Style>
+
     <!-- Card: settings sections, the status header. No states. -->
     <Style x:Key="EncoreCardStyle" TargetType="Border">
         <Setter Property="Background" Value="{DynamicResource CardBackgroundFillColorDefaultBrush}" />

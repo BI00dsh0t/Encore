@@ -370,6 +370,17 @@
                                  Converter="{StaticResource Visible}" />
                     </Border.Visibility>
                     <StackPanel>
+                        <StackPanel Margin="0,0,0,16" Orientation="Horizontal">
+                            <Control Width="64"
+                                     Height="64"
+                                     Style="{DynamicResource EncoreMarkStyle}" />
+                            <TextBlock Margin="16,0,0,0"
+                                       VerticalAlignment="Center"
+                                       FontSize="{DynamicResource TitleTextBlockFontSize}"
+                                       FontWeight="SemiBold"
+                                       Foreground="{DynamicResource TextFillColorPrimaryBrush}"
+                                       Text="Keep the moment." />
+                        </StackPanel>
                         <WrapPanel>
                             <TextBlock VerticalAlignment="Center"
                                        FontSize="20"
