@@ -2,6 +2,7 @@ using System.Windows;
 using System.Windows.Controls;
 using System.Windows.Controls.Primitives;
 using System.Windows.Interop;
+using Encore.App.Overlay;
 using Encore.Contracts.Settings;
 using Encore.Platform.Desktop;
 
@@ -56,10 +57,21 @@ public sealed class TrayTests
 
         TrayMenu.ShowCrashLoop(restart, crashLoop: true);
         Assert.Equal(Visibility.Visible, restart.Visibility);
-        Assert.Equal("!", TrayCapture.CrashLoopIcon().Text);
         TrayMenu.ShowCrashLoop(restart, crashLoop: false);
         Assert.Equal(Visibility.Collapsed, restart.Visibility);
     });
+
+    [Theory]
+    [InlineData((int)OverlayDot.None, false, false, false, TrayIcons.IdleDark)]
+    [InlineData((int)OverlayDot.None, false, true, false, TrayIcons.IdleLight)]
+    [InlineData((int)OverlayDot.Hollow, false, true, false, TrayIcons.Ready)]
+    [InlineData((int)OverlayDot.Solid, false, false, false, TrayIcons.Recording)]
+    [InlineData((int)OverlayDot.Hollow, true, false, false, TrayIcons.ErrorDark)]
+    [InlineData((int)OverlayDot.None, true, true, false, TrayIcons.ErrorLight)]
+    [InlineData((int)OverlayDot.Solid, true, true, true, TrayIcons.IdleLight)]
+    public void EachStateShowsItsIconAndHighContrastShowsThePlainMark(
+        int dot, bool crashLoop, bool lightTaskbar, bool highContrast, string expected) =>
+        Assert.Equal(expected, TrayCapture.IconName((OverlayDot)dot, crashLoop, new TaskbarLook(lightTaskbar, highContrast)));
 
     [Fact]
     public void RewindIsAcceptedOnATestInstanceOnly()

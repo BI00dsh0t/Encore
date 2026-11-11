@@ -16,8 +16,11 @@ internal sealed class GeneralSettingsViewModel(SettingsSender sender, AppUpdates
 
     public override string Title => "General";
 
-    /// <summary>The Updates section: the version, the update switches and the restart button.</summary>
+    /// <summary>The About and updates section's update half: the version, the update switches and the restart button.</summary>
     public AppUpdates Updates { get; } = updates ?? AppUpdates.Disabled(Path.Combine(Path.GetTempPath(), "encore-updates.json"));
+
+    /// <summary>The About and updates section's links.</summary>
+    public AboutLinks About { get; } = AboutLinks.ForThisApp();
 
     /// <summary><c>startWithWindows</c>: setting it sends the change; the Run value is written once the engine commits it.</summary>
     public bool StartWithWindows

@@ -49,6 +49,15 @@
     <SolidColorBrush x:Key="EncoreLibraryRowSelectedBrush" Color="#1A2DD4BF" />
     <SolidColorBrush x:Key="EncoreRecordBrush" Color="#FF4655" />
     <SolidColorBrush x:Key="EncoreOverlayCardBrush" Color="#E61E222A" />
+    <SolidColorBrush x:Key="EncoreBrandMintBrush" Color="#2DD4BF" />
+
+    <!-- The Encore mark on its 256 px canvas: the master's ring outlined, its round tail and arrowhead, turned 45° left. -->
+    <PathGeometry x:Key="EncoreMarkGeometry"
+                  Figures="M 128,32 A 96,96 0 1 1 44.8616,80 A 14,14 0 0 1 69.1103,94 A 68,68 0 1 0 128,60 Z M 90,46 L 128,22 L 128,70 Z">
+        <PathGeometry.Transform>
+            <RotateTransform Angle="-45" CenterX="128" CenterY="128" />
+        </PathGeometry.Transform>
+    </PathGeometry>
 
     <!-- Fluent's Window style paints these: bg-base and text-primary. -->
     <StaticResource x:Key="WindowBackground" ResourceKey="SolidBackgroundFillColorBaseBrush" />
@@ -126,9 +135,17 @@
         <Setter Property="FontSize" Value="26" />
         <Setter Property="FontWeight" Value="Black" />
     </Style>
+    <!-- The wordmark keeps the brand's title case and Semibold, so it isn't uppercased like the other styles. -->
     <Style x:Key="EncoreBrandStyle" TargetType="ContentControl" BasedOn="{StaticResource EncoreTextStyleBase}">
         <Setter Property="FontSize" Value="15" />
-        <Setter Property="FontWeight" Value="Black" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Template">
+            <Setter.Value>
+                <ControlTemplate TargetType="ContentControl">
+                    <TextBlock Text="{TemplateBinding Content}" TextTrimming="CharacterEllipsis" />
+                </ControlTemplate>
+            </Setter.Value>
+        </Setter>
     </Style>
 
     <!-- What every Gaming control starts from. -->

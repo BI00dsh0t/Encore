@@ -32,6 +32,41 @@ public sealed partial class ThemeTests
     });
 
     [Fact]
+    public void TheMarkAndEveryTrayIconLoadInBothThemes() => Sta.Run(() =>
+    {
+        var mark = new Control { Width = 64, Height = 64 };
+        var window = Offscreen(new Window { Content = mark, SizeToContent = SizeToContent.WidthAndHeight });
+        var theme = ThemeService.ForWindow(window);
+        mark.SetResourceReference(FrameworkElement.StyleProperty, "EncoreMarkStyle");
+        window.Show();
+        foreach (var which in Both)
+        {
+            theme.Apply(which);
+            mark.UpdateLayout();
+            Assert.Equal(Color.FromRgb(0x2D, 0xD4, 0xBF), ((SolidColorBrush)window.FindResource("EncoreBrandMintBrush")).Color);
+            var bitmap = new RenderTargetBitmap(64, 64, 96, 96, PixelFormats.Pbgra32);
+            bitmap.Render(mark);
+            var pixels = new byte[64 * 64 * 4];
+            bitmap.CopyPixels(pixels, 64 * 4, 0);
+            var mint = Enumerable.Range(0, 64 * 64)
+                .Count(i => pixels[i * 4] == 0xBF && pixels[i * 4 + 1] == 0xD4 && pixels[i * 4 + 2] == 0x2D);
+            Assert.InRange(mint, 250, 1200);
+        }
+
+        window.Close();
+        foreach (var name in TrayIcons.All)
+        {
+            foreach (var size in new[] { 16, 24, 32, 48 })
+            {
+                using var icon = TrayIcons.Load(name, size);
+                Assert.Equal((size, size), (icon.Width, icon.Height));
+            }
+        }
+
+        Assert.InRange(TrayIconSize.Current(), 16, 64);
+    });
+
+    [Fact]
     public void ASettingsChangedSwitchingTheThemeSwapsTheDictionaryInTheSameWindow() => Sta.Run(() =>
     {
         var engine = new FakeEngineSession();

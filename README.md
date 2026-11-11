@@ -1,4 +1,12 @@
-# Encore
+<h1>
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="branding/encore-lockup-dark.svg">
+    <img src="branding/encore-lockup-light.svg" alt="Encore" width="320">
+  </picture>
+</h1>
+
+**Keep the moment.**<br>
+Instant replay and recording for Windows.
 
 Encore records your games on Windows. Rewind keeps the last few minutes of gameplay ready, so a hotkey saves what just happened as a Clip. It also makes full Recordings and Monitor Recordings, and keeps them in a Library with a player and a clip editor.
 
@@ -7,7 +15,7 @@ Encore records your games on Windows. Rewind keeps the last few minutes of gamep
 1. Download `EncoreApp-win-Setup.exe` from the [latest release](https://github.com/BI00dsh0t/Encore/releases/latest).
 2. Run it. It installs for your Windows account only, with no admin prompt, and opens Encore when it's done.
 
-Encore checks for updates in the background and installs them the next time it starts. You can turn that off, or choose beta versions, in Settings › General › Updates.
+Encore checks for updates in the background and installs them the next time it starts. You can turn that off, or choose beta versions, in Settings › General › About and updates.
 
 **Requirements:** Windows 11 24H2 or later, 64-bit. A graphics card with a hardware video encoder (NVIDIA, AMD or Intel) is recommended; without one, Encore encodes on the CPU.
 

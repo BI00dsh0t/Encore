@@ -3,6 +3,7 @@
     <OutputType>WinExe</OutputType>
     <UseWPF>true</UseWPF>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>Icons\encore.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="H.NotifyIcon.Wpf" />
@@ -11,6 +12,10 @@
   <!-- WPF caches this switch when the first window shows, so it is set at process start to keep Mica off every window. -->
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
+  </ItemGroup>
+  <!-- The tray loads its state icons from the App itself. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\tray-*.ico" LogicalName="Encore.App.Icons.%(Filename)%(Extension)" />
   </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Encore.App.Tests" />

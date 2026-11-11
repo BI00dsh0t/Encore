@@ -14,7 +14,7 @@ Use `encore-mark.svg` as the scalable master. White and ink variants support mon
 
 `encore.ico` contains 16, 20, 24, 32, 40, 48, 64, 128, and 256 px frames. `encore-app-icon.svg` and `encore-app-*.png` use the mint mark on a charcoal tile. `encore-mark-*.png` have transparent backgrounds. Raster masters extend to 1024 px.
 
-These are prepared assets; this kit does not change the app's current executable, tray, or navigation icon.
+Frames below 256 px are 32-bit DIBs and the 256 px frame is PNG. The generator also writes the tray icons, one per capture state, and copies `encore.ico` into `src/Encore.App/Icons/`, where the App and the engine build with them.
 
 ## Wordmark and type
 
@@ -36,12 +36,12 @@ The palette continues the app's existing Gaming dark theme. Brand mint is separa
 
 ## Voice
 
-Calm, direct, and specific. Suggested brand line: **Keep the moment.** Product description: **Instant replay and recording for Windows.** Use concrete interface copy such as “Clip saved”, “Recording”, and “Ready to save clips”.
+Calm, direct, and specific. Suggested brand line: **Keep the moment.** Product description: **Instant replay and recording for Windows.** Use concrete interface copy such as “Clip saved”, “Recording”, and “Ready to save Clips”.
 
 ## Reproduce
 
-Run `pwsh -STA -File branding/generate-assets.ps1` on Windows. The generator uses WPF for exact vector rasterization and creates SVG masters, PNG exports, the multi-resolution ICO, and the preview sheet. No external packages are required.
+Run `pwsh -STA -File branding/generate-assets.ps1` on Windows. The generator uses WPF for exact vector rasterization and creates SVG masters, PNG exports, the multi-resolution ICO, the tray icons, the preview sheet, and the 1280 × 640 GitHub social preview. No external packages are required.
 
-The repository keeps only the SVG masters, this README, and the generator. The PNG and ICO exports and the preview sheet are regenerated, so git ignores them; the icons the app builds with are committed separately in `src/Encore.App/Icons/`.
+The repository keeps only the SVG masters, this README, and the generator. The PNG and ICO exports, the preview sheet and the social preview are regenerated, so git ignores them; the icons the app builds with are committed separately in `src/Encore.App/Icons/`.
 
 The AI-generated exploration is kept outside the repository. Production exports use the mathematically constructed vector master rather than the approximate generated ring. Image exploration used the built-in image generation tool; the final edit prompt is saved beside that reference.

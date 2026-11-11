@@ -65,3 +65,8 @@ D3DCREATE_MULTITHREADED
 D3DCREATE_FPU_PRESERVE
 CreateDirect3D11SurfaceFromDXGISurface
 IInspectable
+FindWindow
+GetDpiForWindow
+GetDpiForSystem
+GetSystemMetricsForDpi
+SYSTEM_METRICS_INDEX
