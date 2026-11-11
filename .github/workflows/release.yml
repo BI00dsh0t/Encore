@@ -69,13 +69,10 @@ jobs:
           VERSION: ${{ steps.version.outputs.version }}
         run: dotnet build Encore.slnx -c Release -p:Version=${{ env.VERSION }}
 
+      # Every project's default suite, as in CI. A test that needs hardware the runner lacks skips itself.
       - name: Test
         shell: pwsh
-        run: |
-          foreach ($project in 'Contracts', 'Core', 'Media') {
-            dotnet test --project "tests/Encore.$project.Tests" -c Release --no-build
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+        run: ./tools/test.ps1
 
       - name: Publish
         shell: pwsh

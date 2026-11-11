@@ -47,15 +47,18 @@ jobs:
       - name: Build
         run: dotnet build Encore.slnx -c Release
 
-      # Hosted runners have no GPU, audio devices or interactive desktop, so only the projects that
-      # need none of them run here. The rest, and every Heavy test, run on a developer's PC.
+      # Every project's default suite. A test that needs hardware the runner lacks skips itself.
       - name: Test
         shell: pwsh
-        run: |
-          foreach ($project in 'Contracts', 'Core', 'Media') {
-            dotnet test --project "tests/Encore.$project.Tests" -c Release --no-build
-            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          }
+        run: ./tools/test.ps1 -ResultsDirectory TestResults
+
+      - name: Upload the test reports
+        if: failure()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: test-results
+          path: TestResults
+          if-no-files-found: ignore
 
       # NativeAOT turns trim and AOT warnings into errors only at publish time.
       - name: Publish the engine
