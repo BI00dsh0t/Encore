@@ -43,7 +43,7 @@ if (Test-Path -LiteralPath $Output) {
     Remove-Item -LiteralPath $Output -Recurse -Force
 }
 
-# The App references the engine for build order only (AD-2); with a RuntimeIdentifier the engine is
+# The App references the engine for build order only; with a RuntimeIdentifier the engine is
 # a self-contained AOT exe, which the SDK otherwise refuses beside a framework-dependent App (NETSDK1151).
 dotnet publish $AppProject -c Release -r win-x64 --self-contained false -o $Output `
     -p:ValidateExecutableReferencesMatchSelfContained=false
