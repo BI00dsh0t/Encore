@@ -43,7 +43,7 @@ internal sealed partial class CaptureSession
                     return true;
                 }
 
-                if (!Volatile.Read(ref _anchored) || !(HasRing || IsMonitor) || _stopped || _outputFinished || _keepRing || _chainsClosed)
+                if (!CanRecoverLocked())
                 {
                     return false;
                 }
@@ -56,12 +56,7 @@ internal sealed partial class CaptureSession
 
             lock (_chainLock)
             {
-                _deviceLost = true;
-                DropMoveLocked();
-                foreach (var chain in new[] { _current, _armed, _retiring })
-                {
-                    chain?.Fed = false;
-                }
+                MarkDeviceLostLocked();
             }
         }
 
@@ -114,19 +109,14 @@ internal sealed partial class CaptureSession
                     return true;
                 }
 
-                if (!Volatile.Read(ref _anchored) || !(HasRing || IsMonitor) || _stopped || _outputFinished || _keepRing || _chainsClosed)
+                if (!CanRecoverLocked())
                 {
                     return false;
                 }
 
                 // Already lost: a running attempt installs nothing now, and the teardown below runs once it has finished.
                 _suspended = true;
-                _deviceLost = true;
-                DropMoveLocked();
-                foreach (var chain in new[] { _current, _armed, _retiring })
-                {
-                    chain?.Fed = false;
-                }
+                MarkDeviceLostLocked();
 
                 _log.LogInformation("The PC is going to sleep: tearing capture, the encoder chains and the device down; Rewind's ring is kept");
                 var previous = _recoveryThread;
@@ -144,14 +134,8 @@ internal sealed partial class CaptureSession
         try
         {
             previous?.Join();
-            Thread? restart;
+            JoinRestart();
             bool tornDown;
-            lock (_chainLock)
-            {
-                restart = _restartThread;
-            }
-
-            restart?.Join();
             lock (_chainLock)
             {
                 tornDown = _tornDown;
@@ -168,13 +152,7 @@ internal sealed partial class CaptureSession
         }
 
         // The Recording ends here, at its last fragment; a resume never continues it.
-        RecordingTap? tap;
-        lock (_chainLock)
-        {
-            tap = _lostTap;
-            _lostTap = null;
-        }
-
+        var tap = TakeLostTap();
         try
         {
             tap?.Dispose();
@@ -198,24 +176,58 @@ internal sealed partial class CaptureSession
 
         // Disposing waits for a frame in flight, which takes the gate: never under it.
         capture?.Dispose();
-        EncoderChain? armed;
-        EncoderChain? retiring;
-        EncoderChain? prepared;
+        var (armed, retiring, prepared) = TakeSpareChains();
+        JoinWorkers();
+        var current = KeepLostTap(out var built);
+
+        // Each save bound to it cuts at its press, since its keyframe never comes; the ring's restart needs them done.
+        WaitForWriters(current, began, lost: true);
+
+        // Each in its own step: one that throws on the lost device never leaks the others.
+        DisposeLost("encoder chain", () => current.Dispose(keepRing: true));
+        DisposeLost("armed encoder chain", () => armed?.Dispose());
+        DisposeLost("replaced encoder chain", () => retiring?.Dispose());
+        DisposeLost("prepared encoder chain", () => prepared?.Dispose());
+        DisposeLost("built encoder chain", () => built?.Dispose());
+        D3D11Device? device;
+        lock (_gate)
+        {
+            device = _device;
+            _device = null;
+        }
+
+        DisposeLost("device", () => device?.Dispose());
+        lock (_chainLock)
+        {
+            _tornDown = true;
+        }
+
+        _log.LogInformation("The lost GPU device, its capture and its encoder chains were torn down in {Ms:0} ms; Rewind's ring is kept",
+            (Stopwatch.GetTimestamp() - began) * 1000.0 / _qpcFrequency);
+    }
+
+    /// <summary>Takes the armed, replaced and prepared chains out, and remembers the spec to rebuild. Takes both locks.</summary>
+    private (EncoderChain? Armed, EncoderChain? Retiring, EncoderChain? Prepared) TakeSpareChains()
+    {
         lock (_gate)
         {
             lock (_chainLock)
             {
-                armed = _armed;
+                var armed = _armed;
                 _armed = null;
-                retiring = _retiring;
+                var retiring = _retiring;
                 _retiring = null;
-                prepared = _prepared;
+                var prepared = _prepared;
                 _prepared = null;
                 _rebuildSpec = armed?.Spec ?? _rebuildSpec ?? _current!.Spec;
+                return (armed, retiring, prepared);
             }
         }
+    }
 
-        // Builds, teardowns and retirements already running finish; none starts while the device is lost.
+    /// <summary>Builds, teardowns and retirements already running finish; none starts while the device is lost.</summary>
+    private void JoinWorkers()
+    {
         while (true)
         {
             List<Thread> workers;
@@ -226,7 +238,7 @@ internal sealed partial class CaptureSession
 
             if (workers.Count == 0)
             {
-                break;
+                return;
             }
 
             foreach (var worker in workers)
@@ -234,10 +246,13 @@ internal sealed partial class CaptureSession
                 worker.Join();
             }
         }
+    }
 
+    /// <summary>Keeps the current chain's Recording tap open for the recovery, and takes a build that finished meanwhile.</summary>
+    private EncoderChain KeepLostTap(out EncoderChain? built)
+    {
         EncoderChain current;
         RecordingTap? extra = null;
-        EncoderChain? built;
         lock (_chainLock)
         {
             // A build that finished meanwhile.
@@ -264,59 +279,33 @@ internal sealed partial class CaptureSession
             _log.LogWarning("Closing a second lost Recording tap failed: {Message}", e.Message);
         }
 
-        // Each save bound to it cuts at its press, since its keyframe never comes; the ring's restart needs them done.
-        var deadline = began + (3 * _qpcFrequency);
-        while (!Volatile.Read(ref _stopped))
-        {
-            lock (_chainLock)
-            {
-                if (current.Writers == 0)
-                {
-                    break;
-                }
-            }
-
-            if (Stopwatch.GetTimestamp() >= deadline)
-            {
-                _log.LogWarning("A save bound to the lost encoder chain hadn't cut within 3 s; the chain is torn down anyway");
-                break;
-            }
-
-            Thread.Sleep(10);
-        }
-
-        // Each in its own step: one that throws on the lost device never leaks the others.
-        void Step(string what, Action dispose)
-        {
-            try
-            {
-                dispose();
-            }
-            catch (Exception e)
-            {
-                _log.LogWarning("Tearing down the lost {What} failed: {Message}", what, e.Message);
-            }
-        }
-
-        Step("encoder chain", () => current.Dispose(keepRing: true));
-        Step("armed encoder chain", () => armed?.Dispose());
-        Step("replaced encoder chain", () => retiring?.Dispose());
-        Step("prepared encoder chain", () => prepared?.Dispose());
-        Step("built encoder chain", () => built?.Dispose());
-        D3D11Device? device;
-        lock (_gate)
-        {
-            device = _device;
-            _device = null;
-        }
-
-        Step("device", () => device?.Dispose());
-        lock (_chainLock)
-        {
-            _tornDown = true;
-        }
-
-        _log.LogInformation("The lost GPU device, its capture and its encoder chains were torn down in {Ms:0} ms; Rewind's ring is kept",
-            (Stopwatch.GetTimestamp() - began) * 1000.0 / _qpcFrequency);
+        return current;
     }
+
+    /// <summary>Disposes one part of the lost pipeline; a failure is logged, so the other parts are still freed.</summary>
+    private void DisposeLost(string what, Action dispose)
+    {
+        try
+        {
+            dispose();
+        }
+        catch (Exception e)
+        {
+            _log.LogWarning("Tearing down the lost {What} failed: {Message}", what, e.Message);
+        }
+    }
+
+    /// <summary>Marks the device lost: a pending size move is dropped and no chain is fed. Under both locks.</summary>
+    private void MarkDeviceLostLocked()
+    {
+        _deviceLost = true;
+        DropMoveLocked();
+        foreach (var chain in new[] { _current, _armed, _retiring })
+        {
+            chain?.Fed = false;
+        }
+    }
+
+    /// <summary>Whether a lost device can be recovered from: anchored, holding a Rewind or the Monitor session, and not ending.</summary>
+    private bool CanRecoverLocked() => Volatile.Read(ref _anchored) && (HasRing || IsMonitor) && !IsEndingLocked;
 }

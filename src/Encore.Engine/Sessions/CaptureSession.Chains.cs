@@ -117,7 +117,7 @@ internal sealed partial class CaptureSession
     private void StartBuildLocked()
     {
         if (_wanted is not { } spec || _chainsClosed || !Volatile.Read(ref _anchored) || _building || _restarting || _deviceLost
-            || _prepared is not null || _armed is not null || _retiring is not null || _tearingDown > 0)
+            || _prepared is not null || IsSwitchingLocked || _tearingDown > 0)
         {
             return;
         }
@@ -214,7 +214,7 @@ internal sealed partial class CaptureSession
 
             lock (_chainLock)
             {
-                if (_prepared is { } prepared && _armed is null && _retiring is null && !_restarting && !_deviceLost && ReferenceEquals(chain, _current)
+                if (_prepared is { } prepared && !IsSwitchingLocked && !_restarting && !_deviceLost && ReferenceEquals(chain, _current)
                     && chain.Tap is { HasWriter: false } && !_outputFinished && !_keepRing && !_chainsClosed)
                 {
                     _prepared = null;
@@ -237,6 +237,44 @@ internal sealed partial class CaptureSession
             MicrosAt(qpc) / 1e6);
         return armed;
     }
+
+    /// <summary>Waits up to 3 s from began for the saves bound to a chain to cut; a lost chain's wait also ends at a stop.</summary>
+    private void WaitForWriters(EncoderChain chain, long began, bool lost)
+    {
+        var deadline = began + (3 * _qpcFrequency);
+        while (!lost || !Volatile.Read(ref _stopped))
+        {
+            lock (_chainLock)
+            {
+                if (chain.Writers == 0)
+                {
+                    return;
+                }
+            }
+
+            if (Stopwatch.GetTimestamp() >= deadline)
+            {
+                if (lost)
+                {
+                    _log.LogWarning("A save bound to the lost encoder chain hadn't cut within 3 s; the chain is torn down anyway");
+                }
+                else
+                {
+                    _log.LogWarning("A save bound to the restarted encoder chain hadn't cut within 3 s; the chain is torn down anyway");
+                }
+
+                return;
+            }
+
+            Thread.Sleep(10);
+        }
+    }
+
+    /// <summary>Whether the session is ending: stopped, finished, draining or closed. Read under both locks.</summary>
+    private bool IsEndingLocked => _stopped || _outputFinished || _keepRing || _chainsClosed;
+
+    /// <summary>Whether a chain switch is in flight: one is armed, or the replaced chain is still fed. Under the chain lock.</summary>
+    private bool IsSwitchingLocked => _armed is not null || _retiring is not null;
 
     /// <summary>Ends a save's registration on a chain once it has cut or failed; a switching save records its Clip's end.</summary>
     private void EndWriter(EncoderChain chain, long? switchEndUs)
