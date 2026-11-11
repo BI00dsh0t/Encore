@@ -43,12 +43,17 @@ pwsh tools/publish.ps1
 
 A pushed tag `vX.Y.Z` runs `.github/workflows/release.yml`. It builds and tests in GitHub Actions, packs the installer and the zip, and creates a draft release with checksums, a software bill of materials and a build provenance attestation. A tag with a suffix, such as `v1.2.0-beta.1`, goes to the beta channel.
 
-## Code signing policy
+## Code signing
 
-Release binaries are built only by the release workflow in this repository, from a tagged commit, and are signed only after the maintainer approves the signing step.
+Releases aren't code signed yet, so Windows SmartScreen may say "Windows protected your PC" the first time you run the installer. Choose **More info**, then **Run anyway**.
 
-- Committers and reviewers: [BI00dsh0t](https://github.com/BI00dsh0t)
-- Approvers: [BI00dsh0t](https://github.com/BI00dsh0t)
+To check a download is genuine, compare it with the release's `SHA256SUMS.txt`, or verify its build provenance with the [GitHub CLI](https://cli.github.com/):
+
+```powershell
+gh attestation verify EncoreApp-win-Setup.exe --repo BI00dsh0t/Encore
+```
+
+Release binaries are built only by the release workflow in this repository, from a tagged commit.
 
 Encore sends nothing about you or your PC anywhere. It contacts GitHub only to check for updates, and you can turn that off.
 
