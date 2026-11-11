@@ -42,27 +42,33 @@ internal sealed partial class CaptureSession
                 return;
             }
 
-            if (HasRing)
-            {
-                WatchSourceSize(qpc, contentSize);
-            }
+            Feed(qpc, texture, contentSize);
+        }
+    }
 
-            // The first frame after an armed press: the new chain's first, and where the old chain's forced keyframe lands.
-            if (_armed is { } armed && qpc > _armedQpc)
-            {
-                SwitchTo(armed, qpc);
-            }
+    /// <summary>Gives one frame to the chains that are fed, switching to an armed chain first. Under the gate.</summary>
+    private void Feed(long qpc, nint texture, VideoSize contentSize)
+    {
+        if (HasRing)
+        {
+            WatchSourceSize(qpc, contentSize);
+        }
 
-            if (_retiring is { Fed: true } retiring)
-            {
-                retiring.Draw(qpc, texture, contentSize);
-            }
+        // The first frame after an armed press: the new chain's first, and where the old chain's forced keyframe lands.
+        if (_armed is { } armed && qpc > _armedQpc)
+        {
+            SwitchTo(armed, qpc);
+        }
 
-            // A forced restart drops the frames captured while it rebuilds the chain.
-            if (_current is { Fed: true } current)
-            {
-                current.Draw(qpc, texture, contentSize);
-            }
+        if (_retiring is { Fed: true } retiring)
+        {
+            retiring.Draw(qpc, texture, contentSize);
+        }
+
+        // A forced restart drops the frames captured while it rebuilds the chain.
+        if (_current is { Fed: true } current)
+        {
+            current.Draw(qpc, texture, contentSize);
         }
     }
 
@@ -152,7 +158,26 @@ internal sealed partial class CaptureSession
             throw new InvalidOperationException("A Monitor session captures a monitor; it can't be retargeted.");
         }
 
-        // The caller's pid is not trusted: the window itself must belong to the session's process.
+        var window = WindowOfProcess(target);
+        if (!TakeCaptureOut(target, window, out var old))
+        {
+            return;
+        }
+
+        // Disposing waits for a frame in flight, so the two captures never overlap frames.
+        old?.Dispose();
+        if (InstallCapture(target, window) is not { } next)
+        {
+            return;
+        }
+
+        next.Start();
+        _log.LogInformation("Retargeted to window 0x{Handle:X}", target.Window);
+    }
+
+    /// <summary>The Target's window, which must belong to its process: the caller's pid is not trusted.</summary>
+    private static WindowInfo WindowOfProcess(CaptureTarget target)
+    {
         var window = WindowFinder.FromHandle(target.Window);
         if (window is null || (int)window.ProcessId != target.ProcessId)
         {
@@ -161,7 +186,13 @@ internal sealed partial class CaptureSession
                 $"Window 0x{target.Window:X} does not belong to process {target.ProcessId}.");
         }
 
-        ICaptureSource? old;
+        return window;
+    }
+
+    /// <summary>Takes the running capture out, under the gate; false on a lost device, whose recovery captures the window.</summary>
+    private bool TakeCaptureOut(CaptureTarget target, WindowInfo window, out ICaptureSource? old)
+    {
+        old = null;
         lock (_gate)
         {
             if (_stopped)
@@ -174,38 +205,39 @@ internal sealed partial class CaptureSession
                 // No capture runs on a lost device: the recovery captures the new window.
                 _window = window;
                 _log.LogInformation("Retargeted to window 0x{Handle:X} while the GPU device is lost; the recovery captures it", target.Window);
-                return;
+                return false;
             }
 
             old = _capture;
             _capture = null;
         }
 
-        // Disposing waits for a frame in flight, so the two captures never overlap frames.
-        old?.Dispose();
-        ICaptureSource next;
+        return true;
+    }
+
+    /// <summary>Installs the new window's capture, under the gate; null when the session stopped or the device was lost meanwhile.</summary>
+    private WindowCapture? InstallCapture(CaptureTarget target, WindowInfo window)
+    {
         lock (_gate)
         {
             if (_stopped)
             {
-                return;
+                return null;
             }
 
             if (IsDeviceLost() || _device is not { } device)
             {
                 // Lost meanwhile: the recovery captures the new window.
                 _window = window;
-                return;
+                return null;
             }
 
             // Built under the gate, so a recovery's teardown can't dispose the device under this capture.
-            next = _sources.ForWindow(target.Window, device, CaptureFps());
+            var next = _sources.ForWindow(target.Window, device, CaptureFps());
             _capture = next;
             _window = window;
+            return next;
         }
-
-        next.Start();
-        _log.LogInformation("Retargeted to window 0x{Handle:X}", target.Window);
     }
 
     private int CaptureFps()
