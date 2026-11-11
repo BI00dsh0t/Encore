@@ -22,7 +22,7 @@ internal sealed record PlaybackReport(
 /// <summary>One more file the players were given; Encoded is false, with an error, when the GPU couldn't encode the codec.</summary>
 internal sealed record CodecPlayback(string Name, string Codec, string? File, bool Encoded, string? Error, int AudioTracks, IReadOnlyList<string> TrackTitles, IReadOnlyList<PlayerCheck> Players);
 
-/// <c>bench playback</c>: a short marked capture, then a checklist per player; <c>--auto</c> scripts what it can.
+/// <summary><c>bench playback</c>: a short marked capture, then a checklist per player; <c>--auto</c> scripts what it can.</summary>
 internal static class PlaybackCheck
 {
     public const string FileName = "playback.json";

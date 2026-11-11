@@ -334,7 +334,7 @@ internal sealed class LiveApp : IDisposable
     private static T Wait<T>(Task<T> task) => task.WaitAsync(ReplyTimeout).GetAwaiter().GetResult();
 }
 
-/// <c>bench fps --overlay --recording</c>: the real App with the load as its game, recording during the capture runs.
+/// <summary><c>bench fps --overlay --recording</c>: the real App with the load as its game, recording during the capture runs.</summary>
 internal sealed class LiveCapture : IDisposable
 {
     private static readonly TimeSpan StateTimeout = TimeSpan.FromSeconds(15);

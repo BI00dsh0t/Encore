@@ -22,7 +22,7 @@ public enum RecordingState
     Running,
 }
 
-/// <c>capture.stateChanged</c>: what the Overlay and status line show; only the SessionOrchestrator produces it.
+/// <summary><c>capture.stateChanged</c>: what the Overlay and status line show; only the SessionOrchestrator produces it.</summary>
 public sealed record CaptureState(
     ReplayState Replay,
     RecordingState Recording,
@@ -38,10 +38,10 @@ public sealed record CaptureState(
 /// <summary><c>clip.saved</c>: a Clip was written to <see cref="Path"/>. The SessionOrchestrator is its only producer.</summary>
 public sealed record ClipSaved(string Path);
 
-/// <c>clip.saving</c>: a save press was accepted at <see cref="At"/>; <c>clip.saved</c> or <c>clip.failed</c> follows.
+/// <summary><c>clip.saving</c>: a save press was accepted at <see cref="At"/>; <c>clip.saved</c> or <c>clip.failed</c> follows.</summary>
 public sealed record ClipSaving(DateTimeOffset At);
 
-/// <c>clip.failed</c>: a save made no Clip; <see cref="Reason"/> is an error code such as <c>clip-too-short</c>.
+/// <summary><c>clip.failed</c>: a save made no Clip; <see cref="Reason"/> is an error code such as <c>clip-too-short</c>.</summary>
 public sealed record ClipFailed(string Reason);
 
 /// <summary>A codec this PC can encode, with the FFmpeg encoder the probe chose; HEVC and AV1 may not play everywhere.</summary>
@@ -50,7 +50,7 @@ public sealed record CodecOffer(VideoCodec Codec, string Encoder, bool MayNotPla
 /// <summary>An output resolution the Output Settings offer.</summary>
 public sealed record ResolutionOption(int Width, int Height);
 
-/// <c>capture.videoOptions</c>: what the <c>video</c> key can be set to here; no codec is offered until the probe ran.
+/// <summary><c>capture.videoOptions</c>: what the <c>video</c> key can be set to here; no codec is offered until the probe ran.</summary>
 public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs, IReadOnlyList<ResolutionOption> Resolutions, int MaxFps)
 {
     /// <summary>The resolutions every PC is offered, smallest first.</summary>
@@ -100,7 +100,7 @@ public sealed record VideoOptions(bool Probed, IReadOnlyList<CodecOffer> Codecs,
     }
 }
 
-/// <c>estimate.changed</c>: what the Global Buffer Window costs in RAM or disk; VBR counts at 1.5 times its bitrate.
+/// <summary><c>estimate.changed</c>: what the Global Buffer Window costs in RAM or disk; VBR counts at 1.5 times its bitrate.</summary>
 public sealed record StorageEstimate(ReplayStorage Storage, long Bytes, bool WorstCase, long? FreeBytes, bool ExceedsFree);
 
 /// <summary>Capture messages: Rewind, the capture session and the shared capture state.</summary>

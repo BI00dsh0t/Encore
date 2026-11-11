@@ -67,7 +67,7 @@ internal sealed record ConformanceDriftReport(
     string Verdict,
     IReadOnlyList<string> Warnings);
 
-/// <c>bench drift --app</c>: the final drift run, on the real App and engine with everything on. docs/code-notes.md.
+/// <summary><c>bench drift --app</c>: the final drift run, on the real App and engine with everything on. docs/code-notes.md.</summary>
 internal static class ConformanceDrift
 {
     public const string FileName = "conformance-drift.json";

@@ -2,7 +2,7 @@ using Encore.Contracts.Settings;
 
 namespace Encore.Engine;
 
-/// <c>debug-capture</c>: a test capture of one window; a null Size is the window's size, made even. docs/code-notes.md.
+/// <summary><c>debug-capture</c>: a test capture of one window; a null Size is the window's size, made even. docs/code-notes.md.</summary>
 public sealed record DebugCaptureCommand(
     string? Window,
     nint? Hwnd,

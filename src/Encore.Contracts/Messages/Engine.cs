@@ -157,7 +157,7 @@ public enum EngineRestartReason
     Hung,
 }
 
-/// <c>app.attach</c>'s arguments: the App's process to supervise, and why the App restarted this engine, if it did.
+/// <summary><c>app.attach</c>'s arguments: the App's process to supervise, and why the App restarted this engine, if it did.</summary>
 public sealed record AppAttach(int Pid, EngineRestartReason? EngineRestart = null);
 
 /// <summary><c>app.attached</c>: the App the engine now supervises.</summary>

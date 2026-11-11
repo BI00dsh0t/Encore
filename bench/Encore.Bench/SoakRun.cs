@@ -67,7 +67,7 @@ internal sealed record SoakReport(
     int ExtraPresses = 0,
     IReadOnlyList<SoakRecovery>? Recoveries = null);
 
-/// <c>bench soak</c>: the real engine and App with the GPU load as the game, pressing Save on a timer. docs/code-notes.md.
+/// <summary><c>bench soak</c>: the real engine and App, the GPU load as the game, pressing Save on a timer. docs/code-notes.md.</summary>
 internal static class SoakRun
 {
     public const string SamplesFile = "soak-samples.csv";

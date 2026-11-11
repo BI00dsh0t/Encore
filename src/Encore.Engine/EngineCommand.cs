@@ -11,7 +11,7 @@ public sealed record DebugListCommand : EngineCommand;
 /// <summary>The private media worker, isolated from live engine startup.</summary>
 public sealed record ClipMediaWorkerCommand : EngineCommand;
 
-/// <c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C. Flags: docs/code-notes.md.
+/// <summary><c>serve</c>: the engine proper, serving its pipe until <c>engine.shutdown</c> or Ctrl+C. Flags: docs/code-notes.md.</summary>
 public sealed record ServeCommand(
     string? Instance,
     bool DebugCapture = false,

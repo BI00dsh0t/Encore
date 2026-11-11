@@ -77,7 +77,7 @@ public enum SettingsOpKind
     Remove,
 }
 
-/// <c>settings.update</c>: ops applied all-or-nothing, only while the document is still at the expected revision.
+/// <summary><c>settings.update</c>: ops applied all-or-nothing, only while the document is still at the expected revision.</summary>
 public sealed record SettingsUpdate(long ExpectedRevision, IReadOnlyList<SettingsOp> Ops);
 
 /// <summary>One op; a profile-scope op names an overridable key or a profile attribute. A <c>set</c> replaces the key whole.</summary>

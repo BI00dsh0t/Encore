@@ -35,7 +35,7 @@ public sealed record TargetChanged(TargetGame? From, TargetGame? To, TargetChang
 /// <summary>A running game that Game Detection found, known until its process exits; it is not the Target Game.</summary>
 public sealed record DetectedGame(string ProfileId, string Name, int ProcessId);
 
-/// <c>game.add</c>: hand-adds an executable to <c>manualGames</c>; the engine makes the path canonical.
+/// <summary><c>game.add</c>: hand-adds an executable to <c>manualGames</c>; the engine makes the path canonical.</summary>
 public sealed record GameAdd(string Path);
 
 /// <summary>The reply to <c>game.add</c>: the canonical path now in <c>manualGames</c>.</summary>

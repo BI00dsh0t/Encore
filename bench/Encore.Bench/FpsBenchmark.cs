@@ -25,7 +25,7 @@ internal sealed record FpsRun(
     string? GcSteady,
     string? PresentMode = null);
 
-/// <c>bench fps --overlay</c>: the App's Overlay was on for the capture runs, with this dot mode and message interval.
+/// <summary><c>bench fps --overlay</c>: the App's Overlay was on for the capture runs, with this dot mode and message interval.</summary>
 internal sealed record FpsOverlay(string Dot, bool? OverlayPlanes, int MessageSeconds, bool Recording = false);
 
 /// <summary>The capture condition's means over its runs.</summary>
@@ -59,7 +59,7 @@ internal sealed record FpsReport(
     GpuLoadInfo? Load = null,
     FpsOverlay? Overlay = null);
 
-/// <c>bench fps</c>: a script runs baseline against capture, and Bench maps its results into <c>fps.json</c>.
+/// <summary><c>bench fps</c>: a script runs baseline against capture, and Bench maps its results into <c>fps.json</c>.</summary>
 internal static class FpsBenchmark
 {
     public const string FileName = "fps.json";

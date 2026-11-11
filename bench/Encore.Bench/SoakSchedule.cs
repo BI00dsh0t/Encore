@@ -1,6 +1,6 @@
 namespace Encore.Bench;
 
-/// <c>bench soak</c>'s timetable of samples, presses and one-shot events; the clock and the wait are injected for tests.
+/// <summary><c>bench soak</c>'s timetable of samples, presses and one-shot events; the clock and wait are injected for tests.</summary>
 internal sealed class SoakSchedule(
     TimeSpan duration,
     TimeSpan sampleEvery,

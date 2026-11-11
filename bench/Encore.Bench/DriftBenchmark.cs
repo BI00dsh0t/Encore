@@ -209,7 +209,7 @@ internal static class EngineProcess
     }
 }
 
-/// <c>bench drift</c>: a marked capture, then A/V drift from flashes and bursts and audio-to-audio from the stats.
+/// <summary><c>bench drift</c>: a marked capture, then A/V drift from flashes and bursts and audio-to-audio from the stats.</summary>
 internal static class DriftBenchmark
 {
     public const string FileName = "drift.json";

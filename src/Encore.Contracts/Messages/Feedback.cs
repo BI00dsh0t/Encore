@@ -13,7 +13,7 @@ public enum WarningSeverity
     Error,
 }
 
-/// <c>warning.raised</c>: a user-facing problem, active until it is dismissed. Fields: docs/code-notes.md.
+/// <summary><c>warning.raised</c>: a user-facing problem, active until it is dismissed. Fields: docs/code-notes.md.</summary>
 public sealed record Warning(
     string Id,
     string Code,

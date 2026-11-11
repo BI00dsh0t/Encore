@@ -30,7 +30,7 @@ internal sealed record HotkeyReport(
     string? Error,
     bool? Injected = null);
 
-/// <c>bench hotkey</c>: times real presses of a Save Hotkey, from Bench's keyboard hook to the engine's stamp.
+/// <summary><c>bench hotkey</c>: times real presses of a Save Hotkey, from Bench's keyboard hook to the engine's stamp.</summary>
 internal static class HotkeyBenchmark
 {
     public const string FileName = "hotkey.json";

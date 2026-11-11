@@ -14,7 +14,7 @@ public sealed record AudioDevice(
     bool Available,
     [property: JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingDefault)] bool IsDefault = false);
 
-/// <c>devices.changed</c> and <c>devices.list</c>'s result: present endpoints plus the layouts' absent devices.
+/// <summary><c>devices.changed</c> and <c>devices.list</c>'s result: present endpoints plus the layouts' absent devices.</summary>
 public sealed record AudioDeviceList(IReadOnlyList<AudioDevice> Devices)
 {
     /// <summary>No devices: the engine hasn't listed them yet, or it is an older engine.</summary>
@@ -36,13 +36,13 @@ public sealed record AudioDeviceList(IReadOnlyList<AudioDevice> Devices)
     }
 }
 
-/// <c>meters.watch</c>'s arguments: the Track Layout to meter, saved or an unsaved draft.
+/// <summary><c>meters.watch</c>'s arguments: the Track Layout to meter, saved or an unsaved draft.</summary>
 public sealed record MetersWatch(TrackLayout Layout);
 
 /// <summary>One Track's level: its linear sample peak since the last <c>meters.levels</c>, 0..1, after its limiter.</summary>
 public sealed record TrackLevel(Guid TrackId, float Peak);
 
-/// <c>meters.levels</c>: one level per Track of the watched layout, in layout order; none when nothing is watched.
+/// <summary><c>meters.levels</c>: one level per Track of the watched layout, in layout order; none when nothing is watched.</summary>
 public sealed record MeterLevels(IReadOnlyList<TrackLevel> Tracks)
 {
     /// <summary>No Tracks: nothing is watched, or the engine is an older one.</summary>

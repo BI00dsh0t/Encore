@@ -52,7 +52,7 @@ internal sealed record OverlayReport(
     string? OverlayDot = null,
     IReadOnlyList<bool?>? OverlayPlanes = null);
 
-/// <c>bench overlay</c>: measures the load's presents with the Overlay's dot hidden, shown and hidden again.
+/// <summary><c>bench overlay</c>: measures the load's presents with the Overlay's dot hidden, shown and hidden again.</summary>
 internal static class OverlayBenchmark
 {
     public const string FileName = "overlay.json";
