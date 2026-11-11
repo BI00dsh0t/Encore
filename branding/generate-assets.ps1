@@ -29,16 +29,19 @@ function Brush([string]$Color) {
     return [Windows.Media.BrushConverter]::new().ConvertFromString($Color)
 }
 
+# The ring and the arrowhead fill as one outline, so no anti-aliased seam shows where they meet.
+$markPen = [Windows.Media.Pen]::new([Windows.Media.Brushes]::Black, 28)
+$markPen.StartLineCap = [Windows.Media.PenLineCap]::Round
+$markPen.EndLineCap = [Windows.Media.PenLineCap]::Flat
+$markOutline = [Windows.Media.Geometry]::Combine(
+    [Windows.Media.Geometry]::Parse($arc).GetWidenedPathGeometry($markPen), [Windows.Media.Geometry]::Parse($head),
+    [Windows.Media.GeometryCombineMode]::Union, $null)
+
 function Draw-Mark($Context, [double]$X, [double]$Y, [double]$Size, [string]$Color) {
     $Context.PushTransform([Windows.Media.TranslateTransform]::new($X, $Y))
     $Context.PushTransform([Windows.Media.ScaleTransform]::new($Size / 256, $Size / 256))
     $Context.PushTransform([Windows.Media.RotateTransform]::new(-45, 128, 128))
-    $fill = Brush $Color
-    $pen = [Windows.Media.Pen]::new($fill, 28)
-    $pen.StartLineCap = [Windows.Media.PenLineCap]::Round
-    $pen.EndLineCap = [Windows.Media.PenLineCap]::Flat
-    $Context.DrawGeometry($null, $pen, [Windows.Media.Geometry]::Parse($arc))
-    $Context.DrawGeometry($fill, $null, [Windows.Media.Geometry]::Parse($head))
+    $Context.DrawGeometry((Brush $Color), $null, $markOutline)
     $Context.Pop()
     $Context.Pop()
     $Context.Pop()
