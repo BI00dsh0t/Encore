@@ -13,6 +13,10 @@
   <ItemGroup>
     <RuntimeHostConfigurationOption Include="Switch.System.Windows.Appearance.DisableFluentThemeWindowBackdrop" Value="true" />
   </ItemGroup>
+  <!-- The tray loads its state icons from the App itself. -->
+  <ItemGroup>
+    <EmbeddedResource Include="Icons\tray-*.ico" LogicalName="Encore.App.Icons.%(Filename)%(Extension)" />
+  </ItemGroup>
   <ItemGroup>
     <InternalsVisibleTo Include="Encore.App.Tests" />
   </ItemGroup>

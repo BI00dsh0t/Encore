@@ -1,20 +1,13 @@
-using System.Windows;
-using System.Windows.Media;
-using H.NotifyIcon;
 using Encore.App.Engine;
 using Encore.App.Overlay;
 
 namespace Encore.App;
 
-/// <summary>The tray icon's capture state: grey when idle, red while Rewind runs, a dot while recording, "!" for a crash loop.</summary>
+/// <summary>The tray's capture state and which icon shows it: the mark when idle, the app tile while capturing, a badge for errors.</summary>
 internal static class TrayCapture
 {
     /// <summary>The tooltip's state while the engine is in a crash loop.</summary>
     public const string CrashLoopText = "Encore's background service keeps crashing; Restart from this menu";
-
-    private static readonly Color Off = Color.FromRgb(0x61, 0x61, 0x61);
-    private static readonly Color On = Color.FromRgb(0xC6, 0x28, 0x28);
-    private static readonly Color Error = Color.FromRgb(0xFF, 0xA0, 0x00);
 
     /// <summary>The state the tray shows: the Overlay's dot before <c>overlayDot</c>, none while disconnected.</summary>
     public static OverlayDot For(IEngineSession engine) =>
@@ -27,20 +20,25 @@ internal static class TrayCapture
         _ => "Not capturing",
     };
 
-    public static GeneratedIconSource Icon(OverlayDot dot) => new()
+    /// <summary>The icon file for a state; high contrast shows the plain mark for every state and leaves it to the tooltip.</summary>
+    public static string IconName(OverlayDot dot, bool crashLoop, TaskbarLook look)
     {
-        Text = dot == OverlayDot.Solid ? "●" : "R",
-        Foreground = Brushes.White,
-        Background = new SolidColorBrush(dot == OverlayDot.None ? Off : On),
-        FontWeight = FontWeights.Bold,
-    };
+        var idle = look.IsLight ? TrayIcons.IdleLight : TrayIcons.IdleDark;
+        if (look.IsHighContrast)
+        {
+            return idle;
+        }
 
-    /// <summary>The error state's icon, for <see cref="EngineStatus.CrashLoop"/>.</summary>
-    public static GeneratedIconSource CrashLoopIcon() => new()
-    {
-        Text = "!",
-        Foreground = Brushes.Black,
-        Background = new SolidColorBrush(Error),
-        FontWeight = FontWeights.Bold,
-    };
+        if (crashLoop)
+        {
+            return look.IsLight ? TrayIcons.ErrorLight : TrayIcons.ErrorDark;
+        }
+
+        return dot switch
+        {
+            OverlayDot.Solid => TrayIcons.Recording,
+            OverlayDot.Hollow => TrayIcons.Ready,
+            _ => idle,
+        };
+    }
 }
