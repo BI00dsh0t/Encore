@@ -61,36 +61,9 @@ internal sealed partial class CaptureSession
                 return;
             }
 
-            var current = (_armed ?? _current)?.Spec ?? _spec;
-            EncoderChain? drop;
-            if (next is not null && ChainKey.SameChain(next, current) && _armMove)
-            {
-                // The same settings leave a size move alone.
-                return;
-            }
-
-            if (next is null || ChainKey.SameChain(next, current))
-            {
-                // Null (a Monitor Recording takes the other chain) drops a size move too.
-                drop = _prepared;
-                _prepared = null;
-                _wanted = null;
-                DropMoveLocked();
-            }
-            else if (_wanted is { } wanted && ChainKey.SameChain(next, wanted))
+            if (!WantLocked(next, out var drop))
             {
                 return;
-            }
-            else
-            {
-                _log.LogInformation("The profile's settings need another encoder chain ({Size} at {Fps} fps, {Tracks} Tracks); it is built for the next save",
-                    $"{next.Snapshot.Video.Width}x{next.Snapshot.Video.Height}", next.Snapshot.Video.Fps, next.Audio.Tracks.Count);
-                _wanted = next;
-                drop = _prepared;
-                _prepared = null;
-
-                // The profile's chain is built at a pending move's size, and switches at a save.
-                _armMove = false;
             }
 
             if (drop is not null)
@@ -101,6 +74,43 @@ internal sealed partial class CaptureSession
 
             StartBuildLocked();
         }
+    }
+
+    /// <summary>Records the spec asked for and hands back the prepared chain it replaces; false when nothing changes. Under the chain lock.</summary>
+    private bool WantLocked(SessionSpec? next, out EncoderChain? drop)
+    {
+        drop = null;
+        var current = (_armed ?? _current)?.Spec ?? _spec;
+        if (next is not null && ChainKey.SameChain(next, current) && _armMove)
+        {
+            // The same settings leave a size move alone.
+            return false;
+        }
+
+        if (next is null || ChainKey.SameChain(next, current))
+        {
+            // Null (a Monitor Recording takes the other chain) drops a size move too.
+            drop = _prepared;
+            _prepared = null;
+            _wanted = null;
+            DropMoveLocked();
+            return true;
+        }
+
+        if (_wanted is { } wanted && ChainKey.SameChain(next, wanted))
+        {
+            return false;
+        }
+
+        _log.LogInformation("The profile's settings need another encoder chain ({Size} at {Fps} fps, {Tracks} Tracks); it is built for the next save",
+            $"{next.Snapshot.Video.Width}x{next.Snapshot.Video.Height}", next.Snapshot.Video.Fps, next.Audio.Tracks.Count);
+        _wanted = next;
+        drop = _prepared;
+        _prepared = null;
+
+        // The profile's chain is built at a pending move's size, and switches at a save.
+        _armMove = false;
+        return true;
     }
 
     /// <summary>Starts the build of the spec asked for, when nothing is in the way. Under the chain lock.</summary>
